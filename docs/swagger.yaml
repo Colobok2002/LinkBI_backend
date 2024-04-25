@@ -1,9 +1,8 @@
 info:
   contact: {}
 paths:
-  /example:
+  /token/generateToken:
     get:
-      description: get string data by id
       produces:
       - application/json
       responses:
@@ -12,5 +11,38 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Show example data
+      summary: Получение токена и uuid
+      tags:
+      - Tokens
+  /token/get-public-key:
+    get:
+      parameters:
+      - description: UUID пользователя
+        in: query
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: successful response
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Получение токена и публичного ключа по UUID
+      tags:
+      - Tokens
+  /user/log-in:
+    get:
+      description: "2"
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: successful response
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Функция для авторизации пользователя
 swagger: "2.0"

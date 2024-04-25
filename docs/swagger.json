@@ -4,13 +4,62 @@
         "contact": {}
     },
     "paths": {
-        "/example": {
+        "/token/generateToken": {
             "get": {
-                "description": "get string data by id",
                 "produces": [
                     "application/json"
                 ],
-                "summary": "Show example data",
+                "tags": [
+                    "Tokens"
+                ],
+                "summary": "Получение токена и uuid",
+                "responses": {
+                    "200": {
+                        "description": "successful response",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/token/get-public-key": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Tokens"
+                ],
+                "summary": "Получение токена и публичного ключа по UUID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "UUID пользователя",
+                        "name": "uuid",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "successful response",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/user/log-in": {
+            "get": {
+                "description": "2",
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Функция для авторизации пользователя",
                 "responses": {
                     "200": {
                         "description": "successful response",
