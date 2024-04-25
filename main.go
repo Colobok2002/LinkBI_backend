@@ -5,6 +5,9 @@ import (
 	"Bmessage_backend/routs/Users"
 	"log"
 	"net/http"
+	"os"
+
+	"github.com/joho/godotenv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gocql/gocql"
@@ -13,7 +16,8 @@ import (
 )
 
 func initialScylla() {
-	cluster := gocql.NewCluster("127.0.0.1")
+	clusterIP := os.Getenv("CLUSTER_IP")
+	cluster := gocql.NewCluster(clusterIP)
 	session, err := cluster.CreateSession()
 
 	if err != nil {
@@ -54,6 +58,10 @@ func initialScylla() {
 
 func main() {
 	router := gin.Default()
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatalf("Error loading .env file: %v", err)
+	}
 
 	Users.UsersLoginRouter(router)
 	Tokens.TokensRouter(router)
@@ -69,6 +77,7 @@ func main() {
 	})
 
 	initialScylla()
-	log.Println("Server started port 8080")
-	router.Run(":8080")
+	serverPort := os.Getenv("SERVER_PORT")
+	log.Println("Server will start on port:", serverPort)
+	router.Run(":" + serverPort)
 }
