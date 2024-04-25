@@ -1,20 +1,28 @@
 package main
 
 import (
-	"fmt"
+	"Bmessage_backend/routs/swagger"
 	"net/http"
-	"time"
+
+	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func main() {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		go func() {
-			time.Sleep(2 * time.Second)
-			fmt.Println("Асинхронная задача завершена")
-		}()
-		fmt.Fprintf(w, "Привет, мир!")
+	router := swagger.SetupRouter()
+
+	// Swwagger
+
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, ginSwagger.URL("/swagger-docs")))
+
+	router.GET("/swagger-docs", func(c *gin.Context) {
+		c.File("./docs/swagger.json")
 	})
 
-	fmt.Println("Сервер запущен на http://localhost:8080")
-	http.ListenAndServe(":8080", nil)
+	router.GET("/docs", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/swagger/index.html")
+	})
+
+	router.Run(":8080")
 }

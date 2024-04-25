@@ -1,0 +1,16 @@
+info:
+  contact: {}
+paths:
+  /example:
+    get:
+      description: get string data by id
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: successful response
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Show example data
+swagger: "2.0"

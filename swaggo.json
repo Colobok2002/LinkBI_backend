@@ -1,0 +1,6 @@
+{
+    "searchDir": "./routs,./handlers",
+    "outputDir": "./docs",
+    "parseDependency": true,
+    "parseInternal": true
+}
