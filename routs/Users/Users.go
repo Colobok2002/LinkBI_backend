@@ -1,20 +1,21 @@
 package Users
 
 import (
+	"Bmessage_backend/helpers"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/pem"
 	"log"
 	"os"
-	"strings"
-
+	
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis"
 	"github.com/gocql/gocql"
 	"github.com/google/uuid"
 )
+
+
 
 func UsersRouter(router *gin.Engine) {
 	roustBase := "user/"
@@ -75,37 +76,11 @@ func loginWithCredentials(c *gin.Context) {
 		return
 	}
 
-	if !strings.Contains(privateKeyPEM, "\n") {
-		privateKeyPEM = strings.ReplaceAll(privateKeyPEM, "-----END RSA PRIVATE KEY-----", "\n-----END RSA PRIVATE KEY-----")
-		privateKeyPEM = strings.ReplaceAll(privateKeyPEM, "-----BEGIN RSA PRIVATE KEY-----", "-----BEGIN RSA PRIVATE KEY-----\n")
-	}
-
-	block, _ := pem.Decode([]byte(privateKeyPEM))
-	if block == nil {
-		log.Println("Remaining data after attempt:", string(privateKeyPEM))
-		c.JSON(500, gin.H{"error": "Failed to decode private key"})
-		return
-	}
-
-	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	decryptedLogin, err := Helpers.DecryptDataWithPrivateKey(userData.Login, privateKeyPEM)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to parse private key"})
+		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-
-	loginData, err := base64.StdEncoding.DecodeString(userData.Login)
-	if err != nil {
-		c.JSON(400, gin.H{"error": "Invalid base64 login"})
-		return
-	}
-
-	decryptedLoginBytes, err := rsa.DecryptPKCS1v15(rand.Reader, privateKey, loginData)
-	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to decrypt login"})
-		return
-	}
-
-	decryptedLogin := string(decryptedLoginBytes)
 
 	c.JSON(200, gin.H{"message": "User authenticated successfully", "login": decryptedLogin})
 }
