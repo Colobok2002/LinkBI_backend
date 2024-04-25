@@ -64,16 +64,51 @@ const docTemplate = `{
                 }
             }
         },
-        "/user/log-in": {
-            "get": {
-                "description": "2",
+        "/user/log-in-with-credentials": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
-                "summary": "Функция для авторизации пользователя",
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Аутентификация пользователя по логину и паролю",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "UUID пользователя",
+                        "name": "uuid",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Зашифрованный логин пользователя",
+                        "name": "login",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Зашифрованный пароль пользователя",
+                        "name": "password",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "successful response",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true

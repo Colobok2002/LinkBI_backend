@@ -33,9 +33,26 @@ paths:
       summary: Получение токена и публичного ключа по UUID
       tags:
       - Tokens
-  /user/log-in:
-    get:
-      description: "2"
+  /user/log-in-with-credentials:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: UUID пользователя
+        in: query
+        name: uuid
+        required: true
+        type: string
+      - description: Зашифрованный логин пользователя
+        in: query
+        name: login
+        required: true
+        type: string
+      - description: Зашифрованный пароль пользователя
+        in: query
+        name: password
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -44,5 +61,12 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Функция для авторизации пользователя
+        "400":
+          description: bad request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Аутентификация пользователя по логину и паролю
+      tags:
+      - Users
 swagger: "2.0"
