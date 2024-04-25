@@ -15,6 +15,7 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
+
 func initialScylla() {
 	clusterIP := os.Getenv("CLUSTER_IP")
 	cluster := gocql.NewCluster(clusterIP)
@@ -63,7 +64,7 @@ func main() {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
 
-	Users.UsersLoginRouter(router)
+	Users.UsersRouter(router)
 	Tokens.TokensRouter(router)
 
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, ginSwagger.URL("/swagger-docs")))

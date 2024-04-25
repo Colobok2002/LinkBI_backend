@@ -7,6 +7,9 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"log"
+	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
@@ -31,36 +34,46 @@ func generateToken(c *gin.Context) {
 
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		fmt.Println("Error generating private key:", err)
-		c.JSON(500, gin.H{"error": "Internal server error"})
+		log.Println("Error generating private key:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
-	publicKey, err := sshPublicKey(privateKey)
+	privateKeyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
+	})
+
+	publicKeyDER, err := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
 	if err != nil {
-		fmt.Println("Error generating public key:", err)
-		c.JSON(500, gin.H{"error": "Internal server error"})
+		log.Println("Error marshalling public key:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
+	publicKeyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: publicKeyDER,
+	})
+
+	publicKeyBase64 := stripPEMHeaders(string(publicKeyPEM))
+	privateKeyBase64 := stripPEMHeaders(string(privateKeyPEM))
 
 	client := redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
 		DB:   0,
 	})
-
-	privateKeyStr := string(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)}))
-	publicKeyStr := string(ssh.MarshalAuthorizedKey(publicKey))
-
 	ctx := context.Background()
-
-	err = client.Set(ctx, uuid+"_private_key", privateKeyStr, 0).Err()
-	if err != nil {
-		fmt.Println("Error setting private key in Redis:", err)
-		c.JSON(500, gin.H{"error": "Internal server error"})
+	if err := client.Set(ctx, uuid+"_private_key", privateKeyBase64, 0).Err(); err != nil {
+		log.Println("Error setting private key in Redis:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
-	c.JSON(200, gin.H{"uuid": uuid, "public_key": publicKeyStr})
+	c.JSON(http.StatusOK, gin.H{
+		"uuid":       uuid,
+		"public_key": publicKeyBase64,
+		"privat_key": privateKeyBase64,
+	})
 }
 
 // @Tags Tokens
@@ -121,4 +134,15 @@ func sshPublicKey(privateKey *rsa.PrivateKey) (ssh.PublicKey, error) {
 		return nil, err
 	}
 	return publicRsaKey, nil
+}
+
+func stripPEMHeaders(pemStr string) string {
+	var lines []string = strings.Split(pemStr, "\n")
+	var keyBody string
+	for _, line := range lines {
+		if !strings.Contains(line, "-----BEGIN PUBLIC KEY-----") && !strings.Contains(line, "-----END PUBLIC KEY-----") {
+			keyBody += line
+		}
+	}
+	return keyBody
 }

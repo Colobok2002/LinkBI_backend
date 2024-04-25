@@ -67,25 +67,13 @@
                 "summary": "Аутентификация пользователя по логину и паролю",
                 "parameters": [
                     {
-                        "type": "string",
-                        "description": "UUID пользователя",
-                        "name": "uuid",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Зашифрованный логин пользователя",
-                        "name": "login",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Зашифрованный пароль пользователя",
-                        "name": "password",
-                        "in": "query",
-                        "required": true
+                        "description": "Данные пользователя",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/Users.UserLogin"
+                        }
                     }
                 ],
                 "responses": {
@@ -103,6 +91,122 @@
                             "additionalProperties": true
                         }
                     }
+                }
+            }
+        },
+        "/user/registration": {
+            "post": {
+                "description": "Регистрирует пользователя, сохраняя зашифрованные данные и ключ в базу данных.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Регистрация нового пользователя",
+                "parameters": [
+                    {
+                        "description": "Данные пользователя",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/Users.UserRegistration"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "User registered successfully",
+                        "schema": {
+                            "$ref": "#/definitions/Users.ResponseMessage"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request data",
+                        "schema": {
+                            "$ref": "#/definitions/Users.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to connect to database",
+                        "schema": {
+                            "$ref": "#/definitions/Users.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "Users.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "Users.ResponseMessage": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "Users.UserLogin": {
+            "description": "User login data structure.",
+            "type": "object",
+            "properties": {
+                "login": {
+                    "type": "string",
+                    "example": "john_doe"
+                },
+                "password": {
+                    "type": "string",
+                    "example": "securePassword123"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "Users.UserRegistration": {
+            "description": "User registration data structure.",
+            "type": "object",
+            "properties": {
+                "login": {
+                    "type": "string",
+                    "example": "john_doe"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "John"
+                },
+                "nik": {
+                    "type": "string",
+                    "example": "JohnnyD"
+                },
+                "password": {
+                    "type": "string",
+                    "example": "securePassword123"
+                },
+                "soName": {
+                    "type": "string",
+                    "example": "Doe"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         }
