@@ -5,7 +5,6 @@ import (
 	helpers "Bmessage_backend/helpers"
 	models "Bmessage_backend/models"
 	tokens "Bmessage_backend/routs/tokens"
-	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -114,8 +113,7 @@ func loginWithCredentials(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Внутренняя ошибка сервера"})
 		return
 	}
-	log.Println("CToken - ", token)
-	log.Print()
+
 	c.JSON(http.StatusOK, gin.H{"message": "Пользователь успешно аутентифицирован", "token": сToken})
 }
 
