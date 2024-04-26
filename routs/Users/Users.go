@@ -5,7 +5,6 @@ import (
 	helpers "Bmessage_backend/helpers"
 	models "Bmessage_backend/models"
 	tokens "Bmessage_backend/routs/tokens"
-	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -52,7 +51,7 @@ func loginWithCredentials(c *gin.Context) {
 	var userData UserLogin
 
 	if err := c.BindJSON(&userData); err != nil {
-		c.JSON(400, gin.H{"error": "Invalid request data"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data"})
 		return
 	}
 
@@ -63,23 +62,41 @@ func loginWithCredentials(c *gin.Context) {
 
 	privateKeyPEM, err := client.Get(userData.Uuid + "_private_key").Result()
 	if err != nil {
-		if err == redis.Nil {
-			c.JSON(404, gin.H{"error": "Private key not found"})
-		} else {
-			log.Println("Error getting private key from Redis:", err)
-			c.JSON(500, gin.H{"error": "Internal server error"})
-		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": ""})
 		return
 	}
 
-	decryptedLogin, err := helpers.DecryptDataWithPrivateKey(userData.Login, privateKeyPEM)
+	dLogin, err := helpers.DecryptDataWithPrivateKey(userData.Login, privateKeyPEM)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 
 	}
 
-	c.JSON(200, gin.H{"message": "User authenticated successfully", "login": decryptedLogin})
+	dPassword, err := helpers.DecryptDataWithPrivateKey(userData.Password, privateKeyPEM)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка дешифрования пароля"})
+		return
+	}
+
+	db, err := database.GetDb()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка подключения к базе данных, попробуйте позже"})
+		return
+	}
+
+	var user models.User
+
+	if err := db.Where("login = ?", dLogin).First(&user).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Пользователь не найден"})
+		return
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(dPassword)); err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Неверный пароль"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Пользователь успешно аутентифицирован"})
 }
 
 // UserRegistration represents the JSON structure for a user registration request
@@ -119,42 +136,34 @@ func registerUser(c *gin.Context) {
 
 	privateKeyPEM, err := client.Get(userData.Uuid + "_private_key").Result()
 	if err != nil {
-		if err == redis.Nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Приватный ключ не найден"})
-		} else {
-			log.Println("Ошибка при получении приватного ключа из Redis:", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Внутренняя ошибка сервера"})
-		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Внутренняя ошибка сервера"})
 		return
 	}
 
 	dName, err := helpers.DecryptDataWithPrivateKey(userData.Name, privateKeyPEM)
 	if err != nil {
-		log.Println("Ошибка дешифрования имени:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка дешифрования имени"})
 		return
 	}
 	dSoName, err := helpers.DecryptDataWithPrivateKey(userData.SoName, privateKeyPEM)
 	if err != nil {
-		log.Println("Ошибка дешифрования фамилии:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка дешифрования фамилии"})
 		return
 	}
+
 	dNik, err := helpers.DecryptDataWithPrivateKey(userData.Nik, privateKeyPEM)
 	if err != nil {
-		log.Println("Ошибка дешифрования ника:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка дешифрования ника"})
 		return
 	}
+
 	dLogin, err := helpers.DecryptDataWithPrivateKey(userData.Login, privateKeyPEM)
 	if err != nil {
-		log.Println("Ошибка дешифрования логина:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка дешифрования логина"})
 		return
 	}
 	dPassword, err := helpers.DecryptDataWithPrivateKey(userData.Password, privateKeyPEM)
 	if err != nil {
-		log.Println("Ошибка дешифрования пароля:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка дешифрования пароля"})
 		return
 	}
@@ -173,7 +182,6 @@ func registerUser(c *gin.Context) {
 
 	var count int64
 	if err := db.Model(&models.User{}).Where("nik = ? OR login = ?", dNik, dLogin).Count(&count).Error; err != nil {
-		log.Printf("Ошибка запроса на уникальность пользователя: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка проверки уникальности пользователя"})
 		return
 	}
@@ -193,7 +201,6 @@ func registerUser(c *gin.Context) {
 	}
 
 	if err := db.Create(newUser).Error; err != nil {
-		log.Printf("Ошибка создания пользователя: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка регистрации пользователя"})
 		return
 	}
