@@ -11,10 +11,10 @@ services:
       - redis_network
 
   scylla:
-    image: scylladb/scylla
+    image: scylladb/scylla:latest
     ports:
       - "9042:9042"
-      - "7001:7001"  # Изменен порт для ScyllaDB
+      - "7001:7001"
       - "7199:7199"
       - "9160:9160"
     volumes:
@@ -22,12 +22,28 @@ services:
     networks:
       - scylla_network
 
+  pg:
+    image: postgres:latest
+    environment:
+      POSTGRES_DB: bmessage_data_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: DN2LcGWkZkB5sQjiViKJpG45dTrFoDwKmooZxVsHB5ah0Mtxw7kYzPGeWF63C0p4Kd1VaYW0mUff0Kaqv9z52ugC18FvrXbGRrL6 # Пароль
+    ports:
+      - "9999:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - pg_network
+
 volumes:
   redis_data:
     driver: local
   scylla_data:
     driver: local
+  pg_data:
+    driver: local
 
 networks:
   redis_network:
   scylla_network:
+  pg_network:

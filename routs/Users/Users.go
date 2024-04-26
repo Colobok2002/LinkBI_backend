@@ -1,21 +1,16 @@
 package Users
 
 import (
-	"Bmessage_backend/helpers"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
+	Helpers "Bmessage_backend/helpers"
 	"log"
+	"net/http"
 	"os"
-	
+
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis"
 	"github.com/gocql/gocql"
 	"github.com/google/uuid"
 )
-
-
 
 func UsersRouter(router *gin.Engine) {
 	roustBase := "user/"
@@ -80,6 +75,7 @@ func loginWithCredentials(c *gin.Context) {
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
+
 	}
 
 	c.JSON(200, gin.H{"message": "User authenticated successfully", "login": decryptedLogin})
@@ -108,11 +104,58 @@ type UserRegistration struct {
 // @Failure 500 {object} ErrorResponse "Failed to connect to database"
 // @Router /user/registration [post]
 func registerUser(c *gin.Context) {
-
 	var userData UserRegistration
 
 	if err := c.BindJSON(&userData); err != nil {
-		c.JSON(400, gin.H{"error": "Invalid request data"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data"})
+		return
+	}
+
+	client := redis.NewClient(&redis.Options{
+		Addr: "localhost:6379",
+		DB:   0,
+	})
+
+	privateKeyPEM, err := client.Get(userData.Uuid + "_private_key").Result()
+	if err != nil {
+		if err == redis.Nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Private key not found"})
+		} else {
+			log.Println("Error getting private key from Redis:", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		}
+		return
+	}
+
+	// Decrypt data
+	dName, err := Helpers.DecryptDataWithPrivateKey(userData.Name, privateKeyPEM)
+	if err != nil {
+		log.Println("Error decrypting name:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error decrypting name"})
+		return
+	}
+	dSoName, err := Helpers.DecryptDataWithPrivateKey(userData.SoName, privateKeyPEM)
+	if err != nil {
+		log.Println("Error decrypting soName:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error decrypting soName"})
+		return
+	}
+	dNik, err := Helpers.DecryptDataWithPrivateKey(userData.Nik, privateKeyPEM)
+	if err != nil {
+		log.Println("Error decrypting nik:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error decrypting nik"})
+		return
+	}
+	dLogin, err := Helpers.DecryptDataWithPrivateKey(userData.Login, privateKeyPEM)
+	if err != nil {
+		log.Println("Error decrypting login:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error decrypting login"})
+		return
+	}
+	dPassword, err := Helpers.DecryptDataWithPrivateKey(userData.Password, privateKeyPEM)
+	if err != nil {
+		log.Println("Error decrypting password:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error decrypting password"})
 		return
 	}
 
@@ -121,33 +164,36 @@ func registerUser(c *gin.Context) {
 	cluster.Keyspace = "bmessage_system"
 	session, err := cluster.CreateSession()
 	if err != nil {
-		log.Printf("Failed to create session: %v", err)
-		c.JSON(500, gin.H{"error": "Failed to connect to database"})
+		log.Printf("Failed to connect to database: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to database"})
 		return
 	}
 	defer session.Close()
 
+	log.Printf("213 %v", dNik)
+	log.Printf("213 %v", dLogin)
+
+	// Check if nik or login already exists in the database
+	var count int
+	query := `SELECT COUNT(*) FROM bmessage_system.users WHERE Nik = ? OR login = ?`
+	if err := session.Query(query, dNik, dLogin).Consistency(gocql.Quorum).Scan(&count); err != nil {
+		log.Printf("Failed to query existing user: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check user uniqueness"})
+		return
+	}
+	if count > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "User with given nik or login already exists"})
+		return
+	}
+
+	// Insert new user
 	id := uuid.New()
-
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		log.Printf("Failed to generate private key: %v", err)
-		c.JSON(500, gin.H{"error": "Failed to generate private key"})
-		return
-	}
-
-	privateKeyBytes := x509.MarshalPKCS1PrivateKey(privateKey)
-	privateKeyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: privateKeyBytes,
-	})
-
 	if err := session.Query(`INSERT INTO users (id, Name, SoName, Nik, login, password, PrivateKey) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		id, userData.Name, userData.SoName, userData.Nik, userData.Login, userData.Password, string(privateKeyPEM)).Exec(); err != nil {
+		id, dName, dSoName, dNik, dLogin, dPassword, privateKeyPEM).Exec(); err != nil {
 		log.Printf("Failed to create user: %v", err)
-		c.JSON(500, gin.H{"error": "Failed to register user"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register user"})
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "User registered successfully", "id": id.String()})
+	c.JSON(http.StatusOK, gin.H{"message": "User registered successfully"})
 }
