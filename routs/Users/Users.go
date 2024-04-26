@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func UsersRouter(router *gin.Engine) {
@@ -107,7 +108,7 @@ func registerUser(c *gin.Context) {
 	var userData UserRegistration
 
 	if err := c.BindJSON(&userData); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Неверные входные данные"})
 		return
 	}
 
@@ -119,74 +120,83 @@ func registerUser(c *gin.Context) {
 	privateKeyPEM, err := client.Get(userData.Uuid + "_private_key").Result()
 	if err != nil {
 		if err == redis.Nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Private key not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": "Приватный ключ не найден"})
 		} else {
-			log.Println("Error getting private key from Redis:", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+			log.Println("Ошибка при получении приватного ключа из Redis:", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Внутренняя ошибка сервера"})
 		}
 		return
 	}
 
-	// Decrypt data
 	dName, err := helpers.DecryptDataWithPrivateKey(userData.Name, privateKeyPEM)
 	if err != nil {
-		log.Println("Error decrypting name:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error decrypting name"})
+		log.Println("Ошибка дешифрования имени:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка дешифрования имени"})
 		return
 	}
 	dSoName, err := helpers.DecryptDataWithPrivateKey(userData.SoName, privateKeyPEM)
 	if err != nil {
-		log.Println("Error decrypting soName:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error decrypting soName"})
+		log.Println("Ошибка дешифрования фамилии:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка дешифрования фамилии"})
 		return
 	}
 	dNik, err := helpers.DecryptDataWithPrivateKey(userData.Nik, privateKeyPEM)
 	if err != nil {
-		log.Println("Error decrypting nik:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error decrypting nik"})
+		log.Println("Ошибка дешифрования ника:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка дешифрования ника"})
 		return
 	}
 	dLogin, err := helpers.DecryptDataWithPrivateKey(userData.Login, privateKeyPEM)
 	if err != nil {
-		log.Println("Error decrypting login:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error decrypting login"})
+		log.Println("Ошибка дешифрования логина:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка дешифрования логина"})
 		return
 	}
 	dPassword, err := helpers.DecryptDataWithPrivateKey(userData.Password, privateKeyPEM)
 	if err != nil {
-		log.Println("Error decrypting password:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error decrypting password"})
+		log.Println("Ошибка дешифрования пароля:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка дешифрования пароля"})
+		return
+	}
+
+	bytesPass, err := bcrypt.GenerateFromPassword([]byte(dPassword), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка хеширования пароля"})
 		return
 	}
 
 	db, err := database.GetDb()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка подключения к базе данных, попробуйте позже"})
+		return
+	}
 
 	var count int64
 	if err := db.Model(&models.User{}).Where("nik = ? OR login = ?", dNik, dLogin).Count(&count).Error; err != nil {
-		log.Printf("Failed to query existing user: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check user uniqueness"})
+		log.Printf("Ошибка запроса на уникальность пользователя: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка проверки уникальности пользователя"})
 		return
 	}
+
 	if count > 0 {
-		c.JSON(http.StatusConflict, gin.H{"error": "User with given nik or login already exists"})
+		c.JSON(http.StatusConflict, gin.H{"error": "Пользователь с таким ником или логином уже существует"})
 		return
 	}
 
-
-	newUser := models.User{
+	newUser := &models.User{
 		Name:       dName,
 		SoName:     dSoName,
 		Nik:        dNik,
 		Login:      dLogin,
-		Password:   dPassword,
+		Password:   string(bytesPass),
 		PrivateKey: tokens.GeneratePrivateKey(),
 	}
 
 	if err := db.Create(newUser).Error; err != nil {
-		log.Printf("Failed to create user: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register user"})
+		log.Printf("Ошибка создания пользователя: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка регистрации пользователя"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "User registered successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "Пользователь успешно зарегистрирован"})
 }
