@@ -35,35 +35,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/token/get-public-key": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Tokens"
-                ],
-                "summary": "Получение токена и публичного ключа по UUID",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "UUID пользователя",
-                        "name": "uuid",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "successful response",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/user/log-in-with-credentials": {
             "post": {
                 "consumes": [
@@ -167,6 +138,10 @@ const docTemplate = `{
         "users.ResponseMessage": {
             "type": "object",
             "properties": {
+                "Data": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
                 "message": {
                     "type": "string"
                 },
@@ -182,6 +157,9 @@ const docTemplate = `{
                 "login": {
                     "type": "string",
                     "example": "john_doe"
+                },
+                "pKey": {
+                    "type": "string"
                 },
                 "password": {
                     "type": "string",

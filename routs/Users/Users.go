@@ -20,8 +20,9 @@ func UsersRouter(router *gin.Engine) {
 
 // ResponseMessage defines a standard response message structure.
 type ResponseMessage struct {
-	Status  bool   `json:"status"`
-	Message string `json:"message"`
+	Status  bool                   `json:"status"`
+	Message string                 `json:"message"`
+	Data    map[string]interface{} `json:"Data"`
 }
 
 // ErrorResponse defines a standard error response structure.
@@ -34,6 +35,7 @@ type ErrorResponse struct {
 // @Description User login data structure.
 type UserLogin struct {
 	Uuid     string `json:"uuid"`
+	PKey     string `json:"pKey"`
 	Login    string `json:"login" example:"john_doe"`
 	Password string `json:"password" example:"securePassword123"`
 }
@@ -66,14 +68,14 @@ func loginWithCredentials(c *gin.Context) {
 		return
 	}
 
-	dLogin, err := helpers.DecryptDataWithPrivateKey(userData.Login, privateKeyPEM)
+	dLogin, err := helpers.DecryptWithPrivateKey(userData.Login, privateKeyPEM)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 
 	}
 
-	dPassword, err := helpers.DecryptDataWithPrivateKey(userData.Password, privateKeyPEM)
+	dPassword, err := helpers.DecryptWithPrivateKey(userData.Password, privateKeyPEM)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка дешифрования пароля"})
 		return
@@ -96,7 +98,24 @@ func loginWithCredentials(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Пользователь успешно аутентифицирован"})
+	TokenUserData := map[string]interface{}{
+		"userId": user.ID,
+	}
+
+	token, err := helpers.EncryptAES(TokenUserData)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Внутренняя ошибка сервера"})
+		return
+	}
+
+	сToken, err := helpers.EncryptWithPublicKey(token, userData.PKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Внутренняя ошибка сервера"})
+		return
+	}
+	// log.Println("CToken - ", сToken)
+	// log.Print()
+	c.JSON(http.StatusOK, gin.H{"message": "Пользователь успешно аутентифицирован", "token": сToken})
 }
 
 // UserRegistration represents the JSON structure for a user registration request
@@ -140,29 +159,29 @@ func registerUser(c *gin.Context) {
 		return
 	}
 
-	dName, err := helpers.DecryptDataWithPrivateKey(userData.Name, privateKeyPEM)
+	dName, err := helpers.DecryptWithPrivateKey(userData.Name, privateKeyPEM)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка дешифрования имени"})
 		return
 	}
-	dSoName, err := helpers.DecryptDataWithPrivateKey(userData.SoName, privateKeyPEM)
+	dSoName, err := helpers.DecryptWithPrivateKey(userData.SoName, privateKeyPEM)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка дешифрования фамилии"})
 		return
 	}
 
-	dNik, err := helpers.DecryptDataWithPrivateKey(userData.Nik, privateKeyPEM)
+	dNik, err := helpers.DecryptWithPrivateKey(userData.Nik, privateKeyPEM)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка дешифрования ника"})
 		return
 	}
 
-	dLogin, err := helpers.DecryptDataWithPrivateKey(userData.Login, privateKeyPEM)
+	dLogin, err := helpers.DecryptWithPrivateKey(userData.Login, privateKeyPEM)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка дешифрования логина"})
 		return
 	}
-	dPassword, err := helpers.DecryptDataWithPrivateKey(userData.Password, privateKeyPEM)
+	dPassword, err := helpers.DecryptWithPrivateKey(userData.Password, privateKeyPEM)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка дешифрования пароля"})
 		return

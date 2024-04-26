@@ -20,7 +20,7 @@ import (
 func TokensRouter(router *gin.Engine) {
 	roustBase := "token/"
 	router.GET(roustBase+"generateToken", generateToken)
-	router.GET(roustBase+"get-public-key", getPublicKey)
+	// router.GET(roustBase+"get-public-key", getPublicKey)
 }
 
 // @Tags Tokens
@@ -83,6 +83,7 @@ func generateToken(c *gin.Context) {
 // @Param uuid query string true "UUID пользователя"
 // @Success 200 {object} map[string]interface{} "successful response"
 // @Router /token/get-public-key [get]
+
 func getPublicKey(c *gin.Context) {
 	uuid := c.Query("uuid")
 	if uuid == "" {
