@@ -1,4 +1,4 @@
-package Tokens
+package tokens
 
 import (
 	"context"
@@ -145,4 +145,20 @@ func stripPEMHeaders(pemStr string) string {
 		}
 	}
 	return keyBody
+}
+
+func GeneratePrivateKey() string {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		log.Println("Error generating private key:", err)
+		return ""
+	}
+
+	privateKeyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
+	})
+
+	return stripPEMHeaders(string(privateKeyPEM))
+
 }

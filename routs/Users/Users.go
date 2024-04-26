@@ -1,15 +1,15 @@
-package Users
+package users
 
 import (
-	Helpers "Bmessage_backend/helpers"
+	database "Bmessage_backend/database"
+	helpers "Bmessage_backend/helpers"
+	models "Bmessage_backend/models"
+	tokens "Bmessage_backend/routs/tokens"
 	"log"
 	"net/http"
-	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis"
-	"github.com/gocql/gocql"
-	"github.com/google/uuid"
 )
 
 func UsersRouter(router *gin.Engine) {
@@ -71,7 +71,7 @@ func loginWithCredentials(c *gin.Context) {
 		return
 	}
 
-	decryptedLogin, err := Helpers.DecryptDataWithPrivateKey(userData.Login, privateKeyPEM)
+	decryptedLogin, err := helpers.DecryptDataWithPrivateKey(userData.Login, privateKeyPEM)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -128,55 +128,41 @@ func registerUser(c *gin.Context) {
 	}
 
 	// Decrypt data
-	dName, err := Helpers.DecryptDataWithPrivateKey(userData.Name, privateKeyPEM)
+	dName, err := helpers.DecryptDataWithPrivateKey(userData.Name, privateKeyPEM)
 	if err != nil {
 		log.Println("Error decrypting name:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error decrypting name"})
 		return
 	}
-	dSoName, err := Helpers.DecryptDataWithPrivateKey(userData.SoName, privateKeyPEM)
+	dSoName, err := helpers.DecryptDataWithPrivateKey(userData.SoName, privateKeyPEM)
 	if err != nil {
 		log.Println("Error decrypting soName:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error decrypting soName"})
 		return
 	}
-	dNik, err := Helpers.DecryptDataWithPrivateKey(userData.Nik, privateKeyPEM)
+	dNik, err := helpers.DecryptDataWithPrivateKey(userData.Nik, privateKeyPEM)
 	if err != nil {
 		log.Println("Error decrypting nik:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error decrypting nik"})
 		return
 	}
-	dLogin, err := Helpers.DecryptDataWithPrivateKey(userData.Login, privateKeyPEM)
+	dLogin, err := helpers.DecryptDataWithPrivateKey(userData.Login, privateKeyPEM)
 	if err != nil {
 		log.Println("Error decrypting login:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error decrypting login"})
 		return
 	}
-	dPassword, err := Helpers.DecryptDataWithPrivateKey(userData.Password, privateKeyPEM)
+	dPassword, err := helpers.DecryptDataWithPrivateKey(userData.Password, privateKeyPEM)
 	if err != nil {
 		log.Println("Error decrypting password:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error decrypting password"})
 		return
 	}
 
-	clusterIP := os.Getenv("CLUSTER_IP")
-	cluster := gocql.NewCluster(clusterIP)
-	cluster.Keyspace = "bmessage_system"
-	session, err := cluster.CreateSession()
-	if err != nil {
-		log.Printf("Failed to connect to database: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to database"})
-		return
-	}
-	defer session.Close()
+	db, err := database.GetDb()
 
-	log.Printf("213 %v", dNik)
-	log.Printf("213 %v", dLogin)
-
-	// Check if nik or login already exists in the database
-	var count int
-	query := `SELECT COUNT(*) FROM bmessage_system.users WHERE Nik = ? OR login = ?`
-	if err := session.Query(query, dNik, dLogin).Consistency(gocql.Quorum).Scan(&count); err != nil {
+	var count int64
+	if err := db.Model(&models.User{}).Where("nik = ? OR login = ?", dNik, dLogin).Count(&count).Error; err != nil {
 		log.Printf("Failed to query existing user: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check user uniqueness"})
 		return
@@ -186,10 +172,17 @@ func registerUser(c *gin.Context) {
 		return
 	}
 
-	// Insert new user
-	id := uuid.New()
-	if err := session.Query(`INSERT INTO users (id, Name, SoName, Nik, login, password, PrivateKey) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		id, dName, dSoName, dNik, dLogin, dPassword, privateKeyPEM).Exec(); err != nil {
+
+	newUser := models.User{
+		Name:       dName,
+		SoName:     dSoName,
+		Nik:        dNik,
+		Login:      dLogin,
+		Password:   dPassword,
+		PrivateKey: tokens.GeneratePrivateKey(),
+	}
+
+	if err := db.Create(newUser).Error; err != nil {
 		log.Printf("Failed to create user: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register user"})
 		return

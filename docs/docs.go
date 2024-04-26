@@ -83,7 +83,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/Users.UserLogin"
+                            "$ref": "#/definitions/users.UserLogin"
                         }
                     }
                 ],
@@ -125,7 +125,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/Users.UserRegistration"
+                            "$ref": "#/definitions/users.UserRegistration"
                         }
                     }
                 ],
@@ -133,19 +133,19 @@ const docTemplate = `{
                     "200": {
                         "description": "User registered successfully",
                         "schema": {
-                            "$ref": "#/definitions/Users.ResponseMessage"
+                            "$ref": "#/definitions/users.ResponseMessage"
                         }
                     },
                     "400": {
                         "description": "Invalid request data",
                         "schema": {
-                            "$ref": "#/definitions/Users.ErrorResponse"
+                            "$ref": "#/definitions/users.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Failed to connect to database",
                         "schema": {
-                            "$ref": "#/definitions/Users.ErrorResponse"
+                            "$ref": "#/definitions/users.ErrorResponse"
                         }
                     }
                 }
@@ -153,7 +153,7 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "Users.ErrorResponse": {
+        "users.ErrorResponse": {
             "type": "object",
             "properties": {
                 "error": {
@@ -164,7 +164,7 @@ const docTemplate = `{
                 }
             }
         },
-        "Users.ResponseMessage": {
+        "users.ResponseMessage": {
             "type": "object",
             "properties": {
                 "message": {
@@ -175,7 +175,7 @@ const docTemplate = `{
                 }
             }
         },
-        "Users.UserLogin": {
+        "users.UserLogin": {
             "description": "User login data structure.",
             "type": "object",
             "properties": {
@@ -192,7 +192,7 @@ const docTemplate = `{
                 }
             }
         },
-        "Users.UserRegistration": {
+        "users.UserRegistration": {
             "description": "User registration data structure.",
             "type": "object",
             "properties": {

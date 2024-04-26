@@ -1,17 +1,16 @@
-package Models
+package models
 
 import (
+	Database "Bmessage_backend/database"
 	"fmt"
 	"log"
-	"os"
 
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 // Определение модели User
 type User struct {
-	gorm.Model  
+	gorm.Model
 	Name       string `gorm:"column:name"`
 	SoName     string `gorm:"column:so_name"`
 	Nik        string `gorm:"column:nik;unique"`
@@ -22,18 +21,7 @@ type User struct {
 
 func MigrationUsertabel() {
 
-	dbHost := os.Getenv("POSTGRES_HOST")
-	dbPort := os.Getenv("POSTGRES_PORT")
-	dbUser := os.Getenv("POSTGRES_USER")
-	dbName := os.Getenv("POSTGRES_DB")
-	dbPassword := os.Getenv("POSTGRES_PASSWORD")
-	dbSSLMode := "disable"
-	dbTimeZone := "Asia/Shanghai"
-
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s TimeZone=%s",
-		dbHost, dbUser, dbPassword, dbName, dbPort, dbSSLMode, dbTimeZone)
-
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	db, err := Database.GetDb()
 	if err != nil {
 		log.Fatalf("failed to connect database: %v", err)
 	}

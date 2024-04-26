@@ -72,7 +72,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/Users.UserLogin"
+                            "$ref": "#/definitions/users.UserLogin"
                         }
                     }
                 ],
@@ -114,7 +114,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/Users.UserRegistration"
+                            "$ref": "#/definitions/users.UserRegistration"
                         }
                     }
                 ],
@@ -122,19 +122,19 @@
                     "200": {
                         "description": "User registered successfully",
                         "schema": {
-                            "$ref": "#/definitions/Users.ResponseMessage"
+                            "$ref": "#/definitions/users.ResponseMessage"
                         }
                     },
                     "400": {
                         "description": "Invalid request data",
                         "schema": {
-                            "$ref": "#/definitions/Users.ErrorResponse"
+                            "$ref": "#/definitions/users.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Failed to connect to database",
                         "schema": {
-                            "$ref": "#/definitions/Users.ErrorResponse"
+                            "$ref": "#/definitions/users.ErrorResponse"
                         }
                     }
                 }
@@ -142,7 +142,7 @@
         }
     },
     "definitions": {
-        "Users.ErrorResponse": {
+        "users.ErrorResponse": {
             "type": "object",
             "properties": {
                 "error": {
@@ -153,7 +153,7 @@
                 }
             }
         },
-        "Users.ResponseMessage": {
+        "users.ResponseMessage": {
             "type": "object",
             "properties": {
                 "message": {
@@ -164,7 +164,7 @@
                 }
             }
         },
-        "Users.UserLogin": {
+        "users.UserLogin": {
             "description": "User login data structure.",
             "type": "object",
             "properties": {
@@ -181,7 +181,7 @@
                 }
             }
         },
-        "Users.UserRegistration": {
+        "users.UserRegistration": {
             "description": "User registration data structure.",
             "type": "object",
             "properties": {
