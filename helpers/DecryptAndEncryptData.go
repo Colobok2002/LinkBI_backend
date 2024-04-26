@@ -10,25 +10,9 @@ import (
 	"strings"
 )
 
-func stripPEMHeaders(pemStr string) string {
-	var lines []string = strings.Split(pemStr, "\n")
-	var keyBody string
-	for _, line := range lines {
-		if !strings.Contains(line, "-----BEGIN PUBLIC KEY-----") && !strings.Contains(line, "-----END PUBLIC KEY-----") {
-			keyBody += line
-		}
-	}
-	return keyBody
-}
-
 // DecryptDataWithPrivateKey расшифровывает данные с использованием приватного ключа.
 func DecryptWithPrivateKey(encryptedData, privateKeyBase64 string) (string, error) {
-	if !strings.Contains(privateKeyBase64, "\n") {
-		privateKeyBase64 = strings.ReplaceAll(privateKeyBase64, "-----END RSA PRIVATE KEY-----", "\n-----END RSA PRIVATE KEY-----")
-		privateKeyBase64 = strings.ReplaceAll(privateKeyBase64, "-----BEGIN RSA PRIVATE KEY-----", "-----BEGIN RSA PRIVATE KEY-----\n")
-	}
-
-	privateKeyPEM := privateKeyBase64
+	privateKeyPEM := formatPEM(privateKeyBase64)
 	block, _ := pem.Decode([]byte(privateKeyPEM))
 	if block == nil {
 		return "", errors.New("failed to decode private key")
@@ -57,47 +41,41 @@ func decryptRSA(encryptedData string, privateKey *rsa.PrivateKey) ([]byte, error
 	return rsa.DecryptPKCS1v15(rand.Reader, privateKey, data)
 }
 
+// EncryptWithPublicKey кодирует данные с использованием публичного ключа.
 func EncryptWithPublicKey(data string, publicKeyBase64 string) (string, error) {
-	// Приведение ключа к правильному формату PEM
 	publicKeyPEM := formatPEM(publicKeyBase64)
 
-	// Декодирование PEM-формата ключа
 	block, _ := pem.Decode([]byte(publicKeyPEM))
 	if block == nil {
 		return "", errors.New("failed to decode public key")
 	}
 
-	// Преобразование ключа в структуру rsa.PublicKey
 	publicKeyInterface, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err != nil {
 		return "", err
 	}
 
-	// Приведение ключа к нужному типу
 	publicKey, ok := publicKeyInterface.(*rsa.PublicKey)
 	if !ok {
 		return "", errors.New("failed to convert to RSA public key")
 	}
 
-	// Шифрование данных
 	encryptedBytes, err := rsa.EncryptPKCS1v15(rand.Reader, publicKey, []byte(data))
 	if err != nil {
 		return "", err
 	}
 
-	// Кодирование зашифрованных данных в base64
 	encryptedData := base64.StdEncoding.EncodeToString(encryptedBytes)
 
 	return encryptedData, nil
 }
 
-func formatPEM(publicKeyBase64 string) string {
-	// Проверка, что ключ уже в правильном формате
-	if !strings.Contains(publicKeyBase64, "\n") {
-		// Если нет, добавляем необходимые переносы строк
-		publicKeyBase64 = strings.ReplaceAll(publicKeyBase64, "-----END PUBLIC KEY-----", "\n-----END PUBLIC KEY-----")
-		publicKeyBase64 = strings.ReplaceAll(publicKeyBase64, "-----BEGIN PUBLIC KEY-----", "-----BEGIN PUBLIC KEY-----\n")
+func formatPEM(keyBase64 string) string {
+	if !strings.Contains(keyBase64, "\n") {
+		keyBase64 = strings.ReplaceAll(keyBase64, "-----END PUBLIC KEY-----", "\n-----END PUBLIC KEY-----")
+		keyBase64 = strings.ReplaceAll(keyBase64, "-----BEGIN PUBLIC KEY-----", "-----BEGIN PUBLIC KEY-----\n")
+		keyBase64 = strings.ReplaceAll(keyBase64, "-----END RSA PRIVATE KEY-----", "\n-----END RSA PRIVATE KEY-----")
+		keyBase64 = strings.ReplaceAll(keyBase64, "-----BEGIN RSA PRIVATE KEY-----", "-----BEGIN RSA PRIVATE KEY-----\n")
 	}
-
-	return publicKeyBase64
+	return keyBase64
 }
