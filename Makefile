@@ -10,6 +10,12 @@ swagger:
 buildM:
 	@go build -o build/main_build     
 
+.PHONY: buildMW
+buildMW:
+	@export GOOS=windows
+	@export GOARCH=amd64
+	@go build -o build/main_build.exe  
+
 .PHONY: buildD
 buildD:
 	@go build -o build/dev_build      
