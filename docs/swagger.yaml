@@ -16,6 +16,16 @@ definitions:
       status:
         type: boolean
     type: object
+  users.UserCT:
+    description: User chekToken data structure.
+    properties:
+      pKey:
+        type: string
+      token:
+        type: string
+      uuid:
+        type: string
+    type: object
   users.UserLogin:
     description: User login data structure.
     properties:
@@ -67,6 +77,36 @@ paths:
       summary: Получение токена и uuid
       tags:
       - Tokens
+  /user/chek-token:
+    post:
+      consumes:
+      - application/json
+      description: Проверяет валидность пользователя => сессии
+      parameters:
+      - description: Данные о токене
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/users.UserCT'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User registered successfully
+          schema:
+            $ref: '#/definitions/users.ResponseMessage'
+        "400":
+          description: Invalid request data
+          schema:
+            $ref: '#/definitions/users.ErrorResponse'
+        "500":
+          description: Failed to connect to database
+          schema:
+            $ref: '#/definitions/users.ErrorResponse'
+      summary: Проверка токена
+      tags:
+      - Users
   /user/log-in-with-credentials:
     post:
       consumes:

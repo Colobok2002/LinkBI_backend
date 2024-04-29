@@ -72,7 +72,6 @@ func generateToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"uuid":       uuid,
 		"public_key": publicKeyBase64,
-		"privat_key": privateKeyBase64,
 	})
 }
 

@@ -5,6 +5,7 @@ import (
 	helpers "Bmessage_backend/helpers"
 	models "Bmessage_backend/models"
 	tokens "Bmessage_backend/routs/tokens"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -16,6 +17,7 @@ func UsersRouter(router *gin.Engine) {
 	roustBase := "user/"
 	router.POST(roustBase+"log-in-with-credentials", loginWithCredentials)
 	router.POST(roustBase+"registration", registerUser)
+	router.POST(roustBase+"chek-token", chekTokenUser)
 }
 
 // ResponseMessage defines a standard response message structure.
@@ -126,6 +128,7 @@ type UserRegistration struct {
 	Nik      string `json:"nik" example:"JohnnyD"`
 	Login    string `json:"login" example:"john_doe"`
 	Password string `json:"password" example:"securePassword123"`
+	PKey     string `json:"pKey"`
 }
 
 // registerUser godoc
@@ -223,5 +226,78 @@ func registerUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Пользователь успешно зарегистрирован"})
+	TokenUserData := map[string]interface{}{
+		"userId": newUser.ID,
+	}
+
+	token, err := helpers.EncryptAES(TokenUserData)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Внутренняя ошибка сервера"})
+		return
+	}
+
+	сToken, err := helpers.EncryptWithPublicKey(token, userData.PKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Внутренняя ошибка сервера"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Пользователь успешно зарегистрирован", "token": сToken})
+}
+
+// UserCT represents the JSON structure for a user registration request
+// @Description User chekToken data structure.
+type UserCT struct {
+	Uuid  string `json:"uuid"`
+	PKey  string `json:"pKey"`
+	Token string `json:"token"`
+}
+
+// registerUser godoc
+// @Tags Users
+// @Summary Проверка токена
+// @Description Проверяет валидность пользователя => сессии
+// @Accept json
+// @Produce json
+// @Param data body UserCT true "Данные о токене"
+// @Success 200 {object} ResponseMessage "User registered successfully"
+// @Failure 400 {object} ErrorResponse "Invalid request data"
+// @Failure 500 {object} ErrorResponse "Failed to connect to database"
+// @Router /user/chek-token [post]
+func chekTokenUser(c *gin.Context) {
+	var userData UserCT
+
+	if err := c.BindJSON(&userData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data"})
+		return
+	}
+
+	client := redis.NewClient(&redis.Options{
+		Addr: "localhost:6379",
+		DB:   0,
+	})
+
+	privateKeyPEM, err := client.Get(userData.Uuid + "_private_key").Result()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": ""})
+		return
+	}
+
+	dToken, err := helpers.DecryptWithPrivateKey(userData.Token, privateKeyPEM)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+
+	}
+
+	userDataToToken, err := helpers.DecryptAES(dToken)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+
+	}
+
+	log.Println(userDataToToken)
+
+	c.JSON(http.StatusOK, gin.H{"message": "Пользователь успешно зарегистрирован", "toke": userData})
 }

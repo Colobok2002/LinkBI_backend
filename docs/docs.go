@@ -35,6 +35,52 @@ const docTemplate = `{
                 }
             }
         },
+        "/user/chek-token": {
+            "post": {
+                "description": "Проверяет валидность пользователя =\u003e сессии",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Проверка токена",
+                "parameters": [
+                    {
+                        "description": "Данные о токене",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/users.UserCT"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "User registered successfully",
+                        "schema": {
+                            "$ref": "#/definitions/users.ResponseMessage"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request data",
+                        "schema": {
+                            "$ref": "#/definitions/users.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to connect to database",
+                        "schema": {
+                            "$ref": "#/definitions/users.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/user/log-in-with-credentials": {
             "post": {
                 "consumes": [
@@ -147,6 +193,21 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "boolean"
+                }
+            }
+        },
+        "users.UserCT": {
+            "description": "User chekToken data structure.",
+            "type": "object",
+            "properties": {
+                "pKey": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
