@@ -66,7 +66,7 @@ func DecryptAES(encrypted string) (map[string]interface{}, error) {
 	}
 
 	block, err := aes.NewCipher(secretKey[:])
-	if err != nil {
+	if err != nil { 
 		return nil, err
 	}
 

@@ -31,4 +31,6 @@ func MigrationUsertabel() {
 	}
 
 	fmt.Println("Migration executed successfully")
+	sqlDB, err := db.DB()
+	sqlDB.Close()
 }

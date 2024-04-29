@@ -2,8 +2,10 @@ package database
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 
+	"github.com/gin-gonic/gin"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -27,3 +29,25 @@ func GetDb() (*gorm.DB, error) {
 	return db, nil
 }
 
+type HandlerFunc func(db *gorm.DB, c *gin.Context)
+
+func WithDatabase(handler HandlerFunc) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		db, err := GetDb()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Не удалось подключиться к базе данных"})
+			return
+		}
+
+		defer func() {
+			sqlDB, err := db.DB()
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Внутренняя ошибка сервера"})
+				return
+			}
+			sqlDB.Close()
+		}()
+
+		handler(db, c)
+	}
+}

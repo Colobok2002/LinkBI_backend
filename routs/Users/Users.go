@@ -5,19 +5,20 @@ import (
 	helpers "Bmessage_backend/helpers"
 	models "Bmessage_backend/models"
 	tokens "Bmessage_backend/routs/tokens"
-	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 func UsersRouter(router *gin.Engine) {
 	roustBase := "user/"
-	router.POST(roustBase+"log-in-with-credentials", loginWithCredentials)
-	router.POST(roustBase+"registration", registerUser)
-	router.POST(roustBase+"chek-token", chekTokenUser)
+	router.POST(roustBase+"log-in-with-credentials", database.WithDatabase(loginWithCredentials))
+	router.POST(roustBase+"registration", database.WithDatabase(registerUser))
+	router.POST(roustBase+"chek-token", database.WithDatabase(chekTokenUser))
+	router.POST(roustBase+"check-uniqueness-registration-data", database.WithDatabase(check_uniqueness_registration_data))
 }
 
 // ResponseMessage defines a standard response message structure.
@@ -51,7 +52,7 @@ type UserLogin struct {
 // @Success 200 {object} map[string]interface{} "successful response"
 // @Failure 400 {object} map[string]interface{} "bad request"
 // @Router /user/log-in-with-credentials [post]
-func loginWithCredentials(c *gin.Context) {
+func loginWithCredentials(db *gorm.DB, c *gin.Context) {
 	var userData UserLogin
 
 	if err := c.BindJSON(&userData); err != nil {
@@ -83,7 +84,6 @@ func loginWithCredentials(c *gin.Context) {
 		return
 	}
 
-	db, err := database.GetDb()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка подключения к базе данных, попробуйте позже"})
 		return
@@ -117,6 +117,8 @@ func loginWithCredentials(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Пользователь успешно аутентифицирован", "token": сToken})
+
+	return
 }
 
 // UserRegistration represents the JSON structure for a user registration request
@@ -142,7 +144,7 @@ type UserRegistration struct {
 // @Failure 400 {object} ErrorResponse "Invalid request data"
 // @Failure 500 {object} ErrorResponse "Failed to connect to database"
 // @Router /user/registration [post]
-func registerUser(c *gin.Context) {
+func registerUser(db *gorm.DB, c *gin.Context) {
 	var userData UserRegistration
 
 	if err := c.BindJSON(&userData); err != nil {
@@ -192,12 +194,6 @@ func registerUser(c *gin.Context) {
 	bytesPass, err := bcrypt.GenerateFromPassword([]byte(dPassword), bcrypt.DefaultCost)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка хеширования пароля"})
-		return
-	}
-
-	db, err := database.GetDb()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка подключения к базе данных, попробуйте позже"})
 		return
 	}
 
@@ -264,7 +260,7 @@ type UserCT struct {
 // @Failure 400 {object} ErrorResponse "Invalid request data"
 // @Failure 500 {object} ErrorResponse "Failed to connect to database"
 // @Router /user/chek-token [post]
-func chekTokenUser(c *gin.Context) {
+func chekTokenUser(db *gorm.DB, c *gin.Context) {
 	var userData UserCT
 
 	if err := c.BindJSON(&userData); err != nil {
@@ -297,7 +293,71 @@ func chekTokenUser(c *gin.Context) {
 
 	}
 
-	log.Println(userDataToToken)
+	c.JSON(http.StatusOK, gin.H{"message": "Пользователь успешно зарегистрирован", "token": userDataToToken})
+}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Пользователь успешно зарегистрирован", "toke": userData})
+// UserCUD represents the JSON structure for a user registration request
+// @Description Данные для проверки на уникальность данных
+type UserCUD struct {
+	Uuid  string `json:"uuid"`
+	Nik   string `json:"Nik"`
+	Login string `json:"Login"`
+}
+
+// registerUser godoc
+// @Tags Users
+// @Summary Проверка login и Nik
+// @Description Проверяет не заняты ли login и Nik
+// @Accept json
+// @Produce json
+// @Param data body UserCUD true "Данные о пользователе"
+// @Success 200 {object} ResponseMessage "User registered successfully"
+// @Router /user/check-uniqueness-registration-data [post]
+func check_uniqueness_registration_data(db *gorm.DB, c *gin.Context) {
+
+	var userData UserCUD
+
+	if err := c.BindJSON(&userData); err != nil {
+		c.JSON(http.StatusOK, gin.H{"uniqueNik": false, "uniqueLogin": false})
+		return
+	}
+
+	client := redis.NewClient(&redis.Options{
+		Addr: "localhost:6379",
+		DB:   0,
+	})
+
+	privateKeyPEM, err := client.Get(userData.Uuid + "_private_key").Result()
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"uniqueNik": false, "uniqueLogin": false})
+		return
+	}
+
+	dNik, err := helpers.DecryptWithPrivateKey(userData.Nik, privateKeyPEM)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"uniqueNik": false, "uniqueLogin": false})
+		return
+
+	}
+
+	dLogin, err := helpers.DecryptWithPrivateKey(userData.Login, privateKeyPEM)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"uniqueNik": false, "uniqueLogin": false})
+		return
+
+	}
+
+	var countNik int64
+	if err := db.Model(&models.User{}).Where("nik = ?", dNik).Count(&countNik).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"uniqueNik": false, "uniqueLogin": false})
+		return
+	}
+
+	var countLogin int64
+	if err := db.Model(&models.User{}).Where("login = ?", dLogin).Count(&countLogin).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"uniqueNik": false, "uniqueLogin": false})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"uniqueNik": countNik == 0, "uniqueLogin": countLogin == 0})
 }

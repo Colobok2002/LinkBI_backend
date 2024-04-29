@@ -35,6 +35,40 @@ const docTemplate = `{
                 }
             }
         },
+        "/user/check-uniqueness-registration-data": {
+            "post": {
+                "description": "Проверяет не заняты ли login и Nik",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Проверка login и Nik",
+                "parameters": [
+                    {
+                        "description": "Данные о пользователе",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/users.UserCUD"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "User registered successfully",
+                        "schema": {
+                            "$ref": "#/definitions/users.ResponseMessage"
+                        }
+                    }
+                }
+            }
+        },
         "/user/chek-token": {
             "post": {
                 "description": "Проверяет валидность пользователя =\u003e сессии",
@@ -211,6 +245,21 @@ const docTemplate = `{
                 }
             }
         },
+        "users.UserCUD": {
+            "description": "Данные для проверки на уникальность данных",
+            "type": "object",
+            "properties": {
+                "Login": {
+                    "type": "string"
+                },
+                "Nik": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
         "users.UserLogin": {
             "description": "User login data structure.",
             "type": "object",
@@ -246,6 +295,9 @@ const docTemplate = `{
                 "nik": {
                     "type": "string",
                     "example": "JohnnyD"
+                },
+                "pKey": {
+                    "type": "string"
                 },
                 "password": {
                     "type": "string",

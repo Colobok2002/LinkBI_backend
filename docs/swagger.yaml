@@ -26,6 +26,16 @@ definitions:
       uuid:
         type: string
     type: object
+  users.UserCUD:
+    description: Данные для проверки на уникальность данных
+    properties:
+      Login:
+        type: string
+      Nik:
+        type: string
+      uuid:
+        type: string
+    type: object
   users.UserLogin:
     description: User login data structure.
     properties:
@@ -52,6 +62,8 @@ definitions:
       nik:
         example: JohnnyD
         type: string
+      pKey:
+        type: string
       password:
         example: securePassword123
         type: string
@@ -77,6 +89,28 @@ paths:
       summary: Получение токена и uuid
       tags:
       - Tokens
+  /user/check-uniqueness-registration-data:
+    post:
+      consumes:
+      - application/json
+      description: Проверяет не заняты ли login и Nik
+      parameters:
+      - description: Данные о пользователе
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/users.UserCUD'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User registered successfully
+          schema:
+            $ref: '#/definitions/users.ResponseMessage'
+      summary: Проверка login и Nik
+      tags:
+      - Users
   /user/chek-token:
     post:
       consumes:
