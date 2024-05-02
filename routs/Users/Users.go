@@ -5,6 +5,7 @@ import (
 	helpers "Bmessage_backend/helpers"
 	models "Bmessage_backend/models"
 	tokens "Bmessage_backend/routs/tokens"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -81,11 +82,6 @@ func loginWithCredentials(db *gorm.DB, c *gin.Context) {
 	dPassword, err := helpers.DecryptWithPrivateKey(userData.Password, privateKeyPEM)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка дешифрования пароля"})
-		return
-	}
-
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка подключения к базе данных, попробуйте позже"})
 		return
 	}
 
@@ -264,6 +260,7 @@ func chekTokenUser(db *gorm.DB, c *gin.Context) {
 	var userData UserCT
 
 	if err := c.BindJSON(&userData); err != nil {
+		log.Println(123)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data"})
 		return
 	}

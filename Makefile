@@ -1,5 +1,8 @@
 .PHONY: run
 run: swagger
+	@export PATH=$PATH:$HOME/go/bin
+	@export GOOS=darwin
+	@export GOARCH=arm64
 	@go run main.go
 
 .PHONY: swagger
