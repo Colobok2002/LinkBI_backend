@@ -9,11 +9,6 @@ import (
 	"github.com/gocql/gocql"
 )
 
-func CreateKeyspaceScylla(session *gocql.Session, keyspaceName string) error {
-	createKeyspaceQuery := fmt.Sprintf("CREATE KEYSPACE IF NOT EXISTS %s WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1};", keyspaceName)
-	return session.Query(createKeyspaceQuery).Exec()
-}
-
 func GetSession() (*gocql.Session, error) {
 	cluster := gocql.NewCluster(os.Getenv("SCYLLA_HOST"))
 	cluster.Port = 9042
@@ -38,5 +33,50 @@ func WithDatabaseScylla(handler HandlerFuncScylla) gin.HandlerFunc {
 		}
 		defer session.Close()
 		handler(session, c)
+	}
+}
+
+func keyspaceExists(session *gocql.Session, keyspaceName string) (bool, error) {
+	query := "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name = ?"
+	var name string
+	if err := session.Query(query, keyspaceName).Consistency(gocql.One).Scan(&name); err != nil {
+		if err == gocql.ErrNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+func CreateKeyspaceScylla(session *gocql.Session, keyspaceName string) error {
+	createKeyspaceQuery := fmt.Sprintf("CREATE KEYSPACE IF NOT EXISTS %s WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1};", keyspaceName)
+	return session.Query(createKeyspaceQuery).Exec()
+}
+
+func InitScylla() {
+	session, err := GetSession()
+	if err != nil {
+		fmt.Printf("Ошибка при подключении к базе данных: %v\n", err)
+		return
+	}
+	defer session.Close()
+
+	keyspaceName := "chat"
+
+	exists, err := keyspaceExists(session, keyspaceName)
+	if err != nil {
+		fmt.Printf("Ошибка при проверке наличия keyspace %s: %v\n", keyspaceName, err)
+		return
+	}
+
+	if exists {
+		fmt.Printf("Keyspace %s уже существует\n", keyspaceName)
+	} else {
+		// Создание keyspace, если он не существует
+		if err := CreateKeyspaceScylla(session, keyspaceName); err != nil {
+			fmt.Printf("Ошибка при создании keyspace %s: %v\n", keyspaceName, err)
+		} else {
+			fmt.Printf("Keyspace %s успешно создан\n", keyspaceName)
+		}
 	}
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"Bmessage_backend/database"
 	Models "Bmessage_backend/models"
 	"Bmessage_backend/routs/chats"
 	"Bmessage_backend/routs/tokens"
@@ -25,6 +26,7 @@ func main() {
 
 	// Migrations
 	Models.MigrationUsertabel()
+	database.InitScylla()
 
 	// Routs
 	router := gin.Default()
