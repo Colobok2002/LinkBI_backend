@@ -3,17 +3,41 @@ package chats
 import (
 	"Bmessage_backend/database"
 	"fmt"
-	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gocql/gocql"
 )
 
+func registerUserTemplate(userID string) bool {
+
+	session, err := database.GetSession()
+
+	if err != nil {
+		return false
+	}
+
+	keyspace := fmt.Sprintf("keyspace_%s", userID)
+
+	database.CreateKeyspaceScylla(session, keyspace)
+
+	createTableQuery := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s.chat (
+		chat_id uuid PRIMARY KEY,
+		companion_id text,
+		chat_type text,
+	)`, keyspace)
+
+	if err := session.Query(createTableQuery).Exec(); err != nil {
+		return false
+	}
+
+	return true
+}
+
 func ChatRouter(router *gin.Engine) {
 	routeBase := "chats/"
-	router.GET(routeBase+"get-chats", database.WithDatabaseScylla(GetChatsRouter))
-	router.POST(routeBase+"create-chat", database.WithDatabaseScylla(GetChatsRouter))
+	router.GET(routeBase+"get-chats", database.WithDatabaseScylla(GetChats))
+	router.POST(routeBase+"create-chat", database.WithDatabaseScylla(CreateChat))
 }
 
 // GetChatsRouter retrieves chats for a user.
@@ -27,21 +51,33 @@ func ChatRouter(router *gin.Engine) {
 // @Success 200 {object} map[string]interface{} "successful response"
 // @Failure 400 {object} map[string]interface{} "bad request"
 // @Router /chats/get-chats [get]
-func GetChatsRouter(session *gocql.Session, c *gin.Context) {
+func GetChats(session *gocql.Session, c *gin.Context) {
 	userID := c.Query("user_id")
+
+	registerUserTemplate(userID)
+
 	if userID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing user_id parameter"})
 		return
 	}
 
-	keyspace := "chat"
-	tableName := fmt.Sprintf("%s.%s", keyspace, userID)
+	tableName := fmt.Sprintf("%s.%s", userID, "chats")
+
+	// if exists, err := checkTableExists(session, userID, "chats"); err != nil {
+	// 	c.JSON(http.StatusOK, gin.H{"chats": []string{}})
+	// 	return
+	// } else if !exists {
+	// 	c.JSON(http.StatusOK, gin.H{"chats": []string{}})
+	// 	return
+	// }
 
 	query := fmt.Sprintf("SELECT chat_id, companion_id, type FROM %s", tableName)
+
 	var chats []map[string]interface{}
 	iter := session.Query(query).Iter()
 
 	var chatID, companionAccountID, chatType string
+
 	for iter.Scan(&chatID, companionAccountID, &chatType) {
 		chats = append(chats, map[string]interface{}{
 			"chat_id":      chatID,
@@ -50,12 +86,10 @@ func GetChatsRouter(session *gocql.Session, c *gin.Context) {
 		})
 	}
 	if err := iter.Close(); err != nil {
-		log.Printf("Error closing iterator: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error fetching chats"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error fetching chats: %v", err)})
 		return
 	}
 
-	// Decide on response based on the content of the chats slice
 	if len(chats) == 0 {
 		c.JSON(http.StatusOK, gin.H{"chats": []string{}})
 	} else {
@@ -80,64 +114,41 @@ type CreateChatStruct struct {
 // @Success 200 {object} map[string]interface{} "successful response"
 // @Failure 400 {object} map[string]interface{} "bad request"
 // @Router /chats/create-chat [post]
-func CreateChat(c *gin.Context, session *gocql.Session) {
-	var chatData CreateChatStruct
-	if err := c.BindJSON(&chatData); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data"})
-		return
-	}
+func CreateChat(session *gocql.Session, c *gin.Context) {
+	// var chatData CreateChatStruct
+	// if err := c.BindJSON(&chatData); err != nil {
+	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data"})
+	// 	return
+	// }
 
-	userID := chatData.User_id
-	companionID := chatData.Companion_id
+	// userID := chatData.User_id
+	// companionID := chatData.Companion_id
 
-	keyspace := "chat"
-	if err := database.CreateKeyspaceScylla(session, keyspace); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to ensure keyspace %s: %v", keyspace, err)})
-		return
-	}
+	// keyspace := "chat"
+	// if err := database.CreateKeyspaceScylla(session, keyspace); err != nil {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to ensure keyspace %s: %v", keyspace, err)})
+	// 	return
+	// }
 
-	userTables := []string{userID, companionID}
-	for _, ut := range userTables {
-		tableName := fmt.Sprintf("%s.%s", keyspace, ut)
-		if exists, _ := checkTableExists(session, keyspace, ut); !exists {
-			if err := createChatTable(session, tableName); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create table %s: %v", tableName, err)})
-				return
-			}
-		}
-	}
+	// userTables := []string{userID, companionID}
+	// for _, ut := range userTables {
+	// 	tableName := fmt.Sprintf("%s.%s", keyspace, ut)
+	// 	if exists, _ := checkTableExists(session, keyspace, ut); !exists {
+	// 		if err := createChatTable(session, tableName); err != nil {
+	// 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create table %s: %v", tableName, err)})
+	// 			return
+	// 		}
+	// 	}
+	// }
 
-	if err := addChatEntry(session, fmt.Sprintf("%s.%s", keyspace, userID), companionID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to add entry to table %s: %v", userID, err)})
-		return
-	}
-	if err := addChatEntry(session, fmt.Sprintf("%s.%s", keyspace, companionID), userID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to add entry to table %s: %v", companionID, err)})
-		return
-	}
+	// if err := addChatEntry(session, fmt.Sprintf("%s.%s", keyspace, userID), companionID); err != nil {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to add entry to table %s: %v", userID, err)})
+	// 	return
+	// }
+	// if err := addChatEntry(session, fmt.Sprintf("%s.%s", keyspace, companionID), userID); err != nil {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to add entry to table %s: %v", companionID, err)})
+	// 	return
+	// }
 
-	c.JSON(http.StatusOK, gin.H{"message": "Chat setup successfully for both users"})
-}
-
-func checkTableExists(session *gocql.Session, keyspace, tableName string) (bool, error) {
-	query := fmt.Sprintf("SELECT COUNT(*) FROM system_schema.tables WHERE keyspace_name='%s' AND table_name='%s';", keyspace, tableName)
-	var count int
-	if err := session.Query(query).Scan(&count); err != nil {
-		return false, err
-	}
-	return count > 0, nil
-}
-
-func createChatTable(session *gocql.Session, tableName string) error {
-	createTableQuery := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
-		chat_id uuid PRIMARY KEY,
-		companion_id text,
-		type text DEFAULT 'chat'
-	)`, tableName)
-	return session.Query(createTableQuery).Exec()
-}
-
-func addChatEntry(session *gocql.Session, tableName, companionID string) error {
-	insertQuery := fmt.Sprintf("INSERT INTO %s (chat_id, companion_id, type) VALUES (uuid(), ?, 'chat');", tableName)
-	return session.Query(insertQuery, companionID).Exec()
+	// c.JSON(http.StatusOK, gin.H{"message": "Chat setup successfully for both users"})
 }
