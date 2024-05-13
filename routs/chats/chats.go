@@ -2,7 +2,9 @@ package chats
 
 import (
 	"Bmessage_backend/database"
+	"encoding/base64"
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -21,7 +23,7 @@ func registerUserTemplate(userID string) bool {
 
 	database.CreateKeyspaceScylla(session, keyspace)
 
-	createTableQuery := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s.chat (
+	createTableQuery := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s.chats (
 		chat_id uuid PRIMARY KEY,
 		companion_id text,
 		chat_type text,
@@ -48,53 +50,61 @@ func ChatRouter(router *gin.Engine) {
 // @Produce json
 // @Param user_id query string true "user_id"
 // @Param uuid query string true "UUID пользователя"
+// @Param page_state query string false "Стейт следющей страницы"
 // @Success 200 {object} map[string]interface{} "successful response"
 // @Failure 400 {object} map[string]interface{} "bad request"
 // @Router /chats/get-chats [get]
 func GetChats(session *gocql.Session, c *gin.Context) {
 	userID := c.Query("user_id")
-
-	registerUserTemplate(userID)
-
 	if userID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing user_id parameter"})
 		return
 	}
+	pageStateQuery := c.Query("page_state")
+	var pageState []byte // Теперь это слайс байт, а не указатель на строку
 
-	tableName := fmt.Sprintf("%s.%s", userID, "chats")
+	if pageStateQuery != "" {
+		var err error
+		pageState, err = base64.StdEncoding.DecodeString(pageStateQuery)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page state"})
+			return
+		}
+	}
 
-	// if exists, err := checkTableExists(session, userID, "chats"); err != nil {
-	// 	c.JSON(http.StatusOK, gin.H{"chats": []string{}})
-	// 	return
-	// } else if !exists {
-	// 	c.JSON(http.StatusOK, gin.H{"chats": []string{}})
-	// 	return
-	// }
+	keyspace := fmt.Sprintf("keyspace_%s", userID)
 
-	query := fmt.Sprintf("SELECT chat_id, companion_id, type FROM %s", tableName)
+	registerUserTemplate(userID)
+
+	tableName := fmt.Sprintf("%s.%s", keyspace, "chats")
+
+	query := fmt.Sprintf("SELECT chat_id, companion_id, chat_type FROM %s", tableName)
+	q := session.Query(query).PageSize(1).PageState(pageState)
+
+	iter := q.Iter()
+	defer iter.Close()
 
 	var chats []map[string]interface{}
-	iter := session.Query(query).Iter()
 
-	var chatID, companionAccountID, chatType string
+	var chatID gocql.UUID
+	var companionID, chatType string
 
-	for iter.Scan(&chatID, companionAccountID, &chatType) {
-		chats = append(chats, map[string]interface{}{
+	for iter.Scan(&chatID, &companionID, &chatType) {
+		chat := map[string]interface{}{
 			"chat_id":      chatID,
-			"companion_id": companionAccountID,
-			"type":         chatType,
-		})
+			"companion_id": companionID,
+			"chat_type":    chatType,
+		}
+		chats = append(chats, chat)
 	}
+
 	if err := iter.Close(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error fetching chats: %v", err)})
+		log.Println(err)
 		return
 	}
 
-	if len(chats) == 0 {
-		c.JSON(http.StatusOK, gin.H{"chats": []string{}})
-	} else {
-		c.JSON(http.StatusOK, gin.H{"chats": chats})
-	}
+	nextPageState := iter.PageState()
+	c.JSON(http.StatusOK, gin.H{"data": chats, "nextPageState": nextPageState})
 }
 
 // CreateChatStruct represents the JSON structure for a user registration request

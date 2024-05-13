@@ -129,6 +129,10 @@ paths:
         name: uuid
         required: true
         type: string
+      - description: Стейт следющей страницы
+        in: query
+        name: page_state
+        type: string
       produces:
       - application/json
       responses:

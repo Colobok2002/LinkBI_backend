@@ -83,6 +83,12 @@ const docTemplate = `{
                         "name": "uuid",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Стейт следющей страницы",
+                        "name": "page_state",
+                        "in": "query"
                     }
                 ],
                 "responses": {
