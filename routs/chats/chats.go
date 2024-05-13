@@ -2,6 +2,7 @@ package chats
 
 import (
 	"Bmessage_backend/database"
+	"Bmessage_backend/models"
 	"encoding/base64"
 	"fmt"
 	"log"
@@ -69,7 +70,7 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 		return
 	}
 	pageStateQuery := c.Query("page_state")
-	var pageState []byte // Теперь это слайс байт, а не указатель на строку
+	var pageState []byte
 
 	if pageStateQuery != "" {
 		var err error
@@ -112,12 +113,43 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 	}
 
 	if err := iter.Close(); err != nil {
-
 		log.Println(err)
 		return
 	}
-
 	nextPageState := iter.PageState()
+
+	var companionIDs []string
+	for _, chat := range chats {
+		companionIDs = append(companionIDs, chat["companion_id"].(string))
+	}
+
+	db, err := database.GetDb()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Не удалось подключиться к базе данных"})
+		return
+	}
+
+	var users []models.User
+	if err := db.Where("id IN ?", companionIDs).Find(&users).Error; err != nil {
+		log.Println("Failed to fetch users from PostgreSQL:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch users"})
+		return
+	}
+
+	userMap := make(map[string]models.User)
+	for _, user := range users {
+		strID := fmt.Sprintf("%d", user.ID)
+		userMap[strID] = user
+	}
+
+	for i, chat := range chats {
+		if user, ok := userMap[chat["companion_id"].(string)]; ok {
+			chats[i]["companion_name"] = user.Name
+			chats[i]["companion_so_name"] = user.SoName
+			chats[i]["companion_nik"] = user.Nik
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{"data": chats, "nextPageState": nextPageState})
 
 }
