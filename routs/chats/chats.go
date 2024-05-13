@@ -87,7 +87,7 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 	tableName := fmt.Sprintf("%s.%s", keyspace, "chats")
 
 	query := fmt.Sprintf("SELECT chat_id,companion_id,chat_type,secured,last_msg_time,new_msg_count FROM %s", tableName)
-	q := session.Query(query).PageSize(1).PageState(pageState)
+	q := session.Query(query).PageSize(10).PageState(pageState)
 
 	iter := q.Iter()
 	defer iter.Close()
