@@ -12,10 +12,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gocql/gocql"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 func registerUserTemplate(userID string) bool {
-
 	session, err := database.GetSession()
 
 	if err != nil {
@@ -64,6 +64,7 @@ func ChatRouter(router *gin.Engine) {
 	router.GET(routeBase+"get-chats", database.WithDatabaseScylla(GetChats))
 	router.GET(routeBase+"get-chats-secured", database.WithDatabaseScylla(GetChatsSecured))
 	router.POST(routeBase+"create-chat", database.WithDatabaseScylla(CreateChat))
+	router.GET(routeBase+"find-chats", database.WithDatabase(FindChats))
 }
 
 // GetChats retrieves chats for a user.
@@ -303,4 +304,44 @@ func CreateChat(session *gocql.Session, c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Chat setup successfully for both users"})
+}
+
+// FindChats retrieves chats for a user.
+// @Tags Chats
+// @Summary Поиск пользователей
+// @Description Получает список пользователей
+// @Accept json
+// @Produce json
+// @Param search_term query string true "search_term"
+// @Param uuid query string true "UUID пользователя"
+// @Success 200 {object} map[string]interface{} "successful response"
+// @Failure 400 {object} map[string]interface{} "bad request"
+// @Router /chats/find-chats [get]
+func FindChats(db *gorm.DB, c *gin.Context) {
+	searchTerm := c.Query("search_term")
+	searchTerm = "%" + searchTerm + "%"
+	var users []models.User
+
+	log.Println(searchTerm)
+
+	if err := db.Model(&models.User{}).Select("ID", "Name", "SoName", "Nik").Where(
+		"LOWER(name) LIKE LOWER(?) OR LOWER(so_name) LIKE LOWER(?) OR LOWER(nik) LIKE LOWER(?)",
+		searchTerm, searchTerm, searchTerm,
+	).Find(&users).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to find users", "details": err.Error()})
+		return
+	}
+
+	var results []map[string]interface{}
+	for _, user := range users {
+		result := map[string]interface{}{
+			"user_id": user.ID,
+			"Name":    user.Name,
+			"SoName":  user.SoName,
+			"Nik":     user.Nik,
+		}
+		results = append(results, result)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"users": results})
 }

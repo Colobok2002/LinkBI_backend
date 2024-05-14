@@ -113,6 +113,38 @@ paths:
       summary: Создание чата
       tags:
       - Chats
+  /chats/find-chats:
+    get:
+      consumes:
+      - application/json
+      description: Получает список пользователей
+      parameters:
+      - description: search_term
+        in: query
+        name: search_term
+        required: true
+        type: string
+      - description: UUID пользователя
+        in: query
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: successful response
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: bad request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Поиск пользователей
+      tags:
+      - Chats
   /chats/get-chats:
     get:
       consumes:

@@ -45,6 +45,53 @@
                 }
             }
         },
+        "/chats/find-chats": {
+            "get": {
+                "description": "Получает список пользователей",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chats"
+                ],
+                "summary": "Поиск пользователей",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "search_term",
+                        "name": "search_term",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "UUID пользователя",
+                        "name": "uuid",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "successful response",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/chats/get-chats": {
             "get": {
                 "description": "Получает список чатов для указанного пользователя.",
