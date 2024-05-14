@@ -34,24 +34,39 @@ func registerUserTemplate(userID string) bool {
 		muted boolean,
 		last_msg_time timestamp,
 		new_msg_count int,
-		PRIMARY KEY ((secured), last_msg_time, chat_id)
-	) WITH CLUSTERING ORDER BY (last_msg_time DESC)`, keyspace)
+		PRIMARY KEY (companion_id, chat_id)
+	) WITH CLUSTERING ORDER BY (chat_id ASC)`, keyspace)
 
 	if err := session.Query(createTableQuery).Exec(); err != nil {
-		log.Println(err)
+		log.Println("Failed to create table:", err)
+		return false
+	}
+
+	createViewQuery := fmt.Sprintf(`CREATE MATERIALIZED VIEW IF NOT EXISTS %s.chats_view AS
+	SELECT *
+	FROM %s.chats
+	WHERE chat_id IS NOT NULL AND last_msg_time IS NOT NULL
+	PRIMARY KEY ((companion_id), chat_id, last_msg_time)
+	WITH CLUSTERING ORDER BY (last_msg_time DESC)
+	`, keyspace, keyspace)
+
+	if err := session.Query(createViewQuery).Exec(); err != nil {
+		log.Println("Failed to create materialized view:", err)
 		return false
 	}
 
 	return true
+
 }
 
 func ChatRouter(router *gin.Engine) {
 	routeBase := "chats/"
 	router.GET(routeBase+"get-chats", database.WithDatabaseScylla(GetChats))
+	router.GET(routeBase+"get-chats-secured", database.WithDatabaseScylla(GetChatsSecured))
 	router.POST(routeBase+"create-chat", database.WithDatabaseScylla(CreateChat))
 }
 
-// GetChatsRouter retrieves chats for a user.
+// GetChats retrieves chats for a user.
 // @Tags Chats
 // @Summary Получение чатов пользователя
 // @Description Получает список чатов для указанного пользователя.
@@ -65,10 +80,12 @@ func ChatRouter(router *gin.Engine) {
 // @Router /chats/get-chats [get]
 func GetChats(session *gocql.Session, c *gin.Context) {
 	userID := c.Query("user_id")
+
 	if userID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing user_id parameter"})
 		return
 	}
+
 	pageStateQuery := c.Query("page_state")
 	var pageState []byte
 
@@ -85,10 +102,10 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 
 	registerUserTemplate(userID)
 
-	tableName := fmt.Sprintf("%s.%s", keyspace, "chats")
+	viewName := fmt.Sprintf("%s.chats_view", keyspace)
 
-	query := fmt.Sprintf("SELECT chat_id,companion_id,chat_type,secured,last_msg_time,new_msg_count FROM %s", tableName)
-	q := session.Query(query).PageSize(10).PageState(pageState)
+	query := fmt.Sprintf("SELECT chat_id,companion_id,chat_type,secured,last_msg_time,new_msg_count FROM %s WHERE secured = ? ALLOW FILTERING", viewName)
+	q := session.Query(query, false).PageSize(10).PageState(pageState)
 
 	iter := q.Iter()
 	defer iter.Close()
@@ -119,6 +136,7 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 	nextPageState := iter.PageState()
 
 	var companionIDs []string
+
 	for _, chat := range chats {
 		companionIDs = append(companionIDs, chat["companion_id"].(string))
 	}
@@ -150,7 +168,93 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": chats, "nextPageState": nextPageState})
+	c.JSON(http.StatusOK, gin.H{"chats": chats, "nextPageState": nextPageState})
+
+}
+
+// GetChatsSecured retrieves chats for a user.
+// @Tags Chats
+// @Summary Получение чатов пользователя
+// @Description Получает список чатов для указанного пользователя.
+// @Accept json
+// @Produce json
+// @Param user_id query string true "user_id"
+// @Param uuid query string true "UUID пользователя"
+// @Success 200 {object} map[string]interface{} "successful response"
+// @Failure 400 {object} map[string]interface{} "bad request"
+// @Router /chats/get-chats-secured [get]
+func GetChatsSecured(session *gocql.Session, c *gin.Context) {
+	userID := c.Query("user_id")
+
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing user_id parameter"})
+		return
+	}
+
+	keyspace := fmt.Sprintf("keyspace_%s", userID)
+
+	registerUserTemplate(userID)
+
+	viewName := fmt.Sprintf("%s.chats_view", keyspace)
+
+	querySecured := fmt.Sprintf("SELECT chat_id, companion_id, chat_type, secured, last_msg_time, new_msg_count FROM %s WHERE secured = ? ALLOW FILTERING", viewName)
+	qSecured := session.Query(querySecured, true)
+	iterSecured := qSecured.Iter()
+	defer iterSecured.Close()
+
+	var chatsSecured []map[string]interface{}
+	var chatID gocql.UUID
+	var companionID, chatType string
+	var secured bool
+	var lastMsgTime time.Time
+	var newMsgCount int
+
+	for iterSecured.Scan(&chatID, &companionID, &chatType, &secured, &lastMsgTime, &newMsgCount) {
+		chat := map[string]interface{}{
+			"chat_id":       chatID,
+			"companion_id":  companionID,
+			"chat_type":     chatType,
+			"secured":       secured,
+			"last_msg_time": lastMsgTime,
+			"new_msg_count": newMsgCount,
+		}
+		chatsSecured = append(chatsSecured, chat)
+	}
+
+	var companionIDs []string
+
+	for _, chat := range chatsSecured {
+		companionIDs = append(companionIDs, chat["companion_id"].(string))
+	}
+
+	db, err := database.GetDb()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Не удалось подключиться к базе данных"})
+		return
+	}
+
+	var users []models.User
+	if err := db.Where("id IN ?", companionIDs).Find(&users).Error; err != nil {
+		log.Println("Failed to fetch users from PostgreSQL:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch users"})
+		return
+	}
+
+	userMap := make(map[string]models.User)
+	for _, user := range users {
+		strID := fmt.Sprintf("%d", user.ID)
+		userMap[strID] = user
+	}
+
+	for i, chat := range chatsSecured {
+		if user, ok := userMap[chat["companion_id"].(string)]; ok {
+			chatsSecured[i]["companion_name"] = user.Name
+			chatsSecured[i]["companion_so_name"] = user.SoName
+			chatsSecured[i]["companion_nik"] = user.Nik
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"chatsSecured": chatsSecured})
 
 }
 
