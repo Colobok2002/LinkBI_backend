@@ -4,8 +4,8 @@ import (
 	database "Bmessage_backend/database"
 	helpers "Bmessage_backend/helpers"
 	models "Bmessage_backend/models"
+	"Bmessage_backend/routs/chats"
 	tokens "Bmessage_backend/routs/tokens"
-	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -96,8 +96,8 @@ func loginWithCredentials(db *gorm.DB, c *gin.Context) {
 		return
 	}
 
-	TokenUserData := map[string]interface{}{
-		"userId": user.ID,
+	TokenUserData := helpers.UserData{
+		User_id: user.ID,
 	}
 
 	token, err := helpers.EncryptAES(TokenUserData)
@@ -113,8 +113,6 @@ func loginWithCredentials(db *gorm.DB, c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Пользователь успешно аутентифицирован", "token": сToken})
-
-	return
 }
 
 // UserRegistration represents the JSON structure for a user registration request
@@ -218,8 +216,8 @@ func registerUser(db *gorm.DB, c *gin.Context) {
 		return
 	}
 
-	TokenUserData := map[string]interface{}{
-		"userId": newUser.ID,
+	TokenUserData := helpers.UserData{
+		User_id: newUser.ID,
 	}
 
 	token, err := helpers.EncryptAES(TokenUserData)
@@ -234,6 +232,7 @@ func registerUser(db *gorm.DB, c *gin.Context) {
 		return
 	}
 
+	chats.RegisterUserTemplate(newUser.ID)
 	c.JSON(http.StatusOK, gin.H{"message": "Пользователь успешно зарегистрирован", "token": сToken})
 }
 
@@ -260,7 +259,6 @@ func chekTokenUser(db *gorm.DB, c *gin.Context) {
 	var userData UserCT
 
 	if err := c.BindJSON(&userData); err != nil {
-		log.Println(123)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data"})
 		return
 	}

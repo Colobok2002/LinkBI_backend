@@ -3,8 +3,8 @@ definitions:
     description: Данные для создания чатов
     properties:
       companion_id:
-        type: string
-      user_id:
+        type: integer
+      user_token:
         type: string
       uuid:
         type: string
@@ -151,9 +151,9 @@ paths:
       - application/json
       description: Получает список чатов для указанного пользователя.
       parameters:
-      - description: user_id
+      - description: Токен пользователя
         in: query
-        name: user_id
+        name: user_token
         required: true
         type: string
       - description: UUID пользователя
@@ -187,9 +187,9 @@ paths:
       - application/json
       description: Получает список чатов для указанного пользователя.
       parameters:
-      - description: user_id
+      - description: Token пользователя
         in: query
-        name: user_id
+        name: user_token
         required: true
         type: string
       - description: UUID пользователя

@@ -119,8 +119,8 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "user_id",
-                        "name": "user_id",
+                        "description": "Токен пользователя",
+                        "name": "user_token",
                         "in": "query",
                         "required": true
                     },
@@ -172,8 +172,8 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "user_id",
-                        "name": "user_id",
+                        "description": "Token пользователя",
+                        "name": "user_token",
                         "in": "query",
                         "required": true
                     },
@@ -397,9 +397,9 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "companion_id": {
-                    "type": "string"
+                    "type": "integer"
                 },
-                "user_id": {
+                "user_token": {
                     "type": "string"
                 },
                 "uuid": {

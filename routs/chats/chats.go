@@ -2,6 +2,7 @@ package chats
 
 import (
 	"Bmessage_backend/database"
+	"Bmessage_backend/helpers"
 	"Bmessage_backend/models"
 	"encoding/base64"
 	"fmt"
@@ -15,45 +16,49 @@ import (
 	"gorm.io/gorm"
 )
 
-func registerUserTemplate(userID string) bool {
+func RegisterUserTemplate(userID uint) bool {
 	session, err := database.GetSession()
 
 	if err != nil {
 		return false
 	}
 
-	keyspace := fmt.Sprintf("keyspace_%s", userID)
+	keyspace := fmt.Sprintf("user_%d", userID)
 
 	database.CreateKeyspaceScylla(session, keyspace)
 
 	createTableQuery := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s.chats (
+		user_id bigint,
 		chat_id uuid,
-		companion_id text,
+		companion_id bigint,
 		chat_type text,
 		secured boolean,
 		muted boolean,
-		last_msg_time timestamp,
 		new_msg_count int,
-		PRIMARY KEY (companion_id, chat_id)
-	) WITH CLUSTERING ORDER BY (chat_id ASC)`, keyspace)
+		last_msg_time timestamp,
+		last_updated timestamp,
+		PRIMARY KEY (user_id,last_updated, companion_id, chat_id)
+	) WITH CLUSTERING ORDER BY (last_updated DESC);
+	`, keyspace)
 
 	if err := session.Query(createTableQuery).Exec(); err != nil {
 		log.Println("Failed to create table:", err)
 		return false
 	}
 
-	createViewQuery := fmt.Sprintf(`CREATE MATERIALIZED VIEW IF NOT EXISTS %s.chats_view AS
-	SELECT *
-	FROM %s.chats
-	WHERE chat_id IS NOT NULL AND last_msg_time IS NOT NULL
-	PRIMARY KEY ((companion_id), chat_id, last_msg_time)
-	WITH CLUSTERING ORDER BY (last_msg_time DESC)
-	`, keyspace, keyspace)
+	// createViewQuery := fmt.Sprintf(`
+	// CREATE MATERIALIZED VIEW IF NOT EXISTS %s.chats_view AS
+	// SELECT *
+	// FROM %s.chats
+	// WHERE companion_id IS NOT NULL AND chat_id IS NOT NULL AND last_msg_time IS NOT NULL
+	// PRIMARY KEY (companion_id, chat_id, last_msg_time)
+	// WITH CLUSTERING ORDER BY (last_msg_time DESC)
+	// `, keyspace, keyspace)
 
-	if err := session.Query(createViewQuery).Exec(); err != nil {
-		log.Println("Failed to create materialized view:", err)
-		return false
-	}
+	// if err := session.Query(createViewQuery).Exec(); err != nil {
+	// 	log.Println("Failed to create materialized view:", err)
+	// 	return false
+	// }
 
 	return true
 
@@ -73,19 +78,26 @@ func ChatRouter(router *gin.Engine) {
 // @Description Получает список чатов для указанного пользователя.
 // @Accept json
 // @Produce json
-// @Param user_id query string true "user_id"
+// @Param user_token query string true "Токен пользователя"
 // @Param uuid query string true "UUID пользователя"
 // @Param page_state query string false "Стейт следющей страницы"
 // @Success 200 {object} map[string]interface{} "successful response"
 // @Failure 400 {object} map[string]interface{} "bad request"
 // @Router /chats/get-chats [get]
 func GetChats(session *gocql.Session, c *gin.Context) {
-	userID := c.Query("user_id")
+	userTokenQuery := c.Query("user_token")
 
-	if userID == "" {
+	if userTokenQuery == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing user_id parameter"})
 		return
 	}
+
+	userDataToToken, err := helpers.DecryptAES(userTokenQuery)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	userID := userDataToToken.User_id
 
 	pageStateQuery := c.Query("page_state")
 	var pageState []byte
@@ -99,14 +111,28 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 		}
 	}
 
-	keyspace := fmt.Sprintf("keyspace_%s", userID)
+	keyspace := fmt.Sprintf("user_%d.chats", userID)
 
-	registerUserTemplate(userID)
+	RegisterUserTemplate(uint(21))
+	RegisterUserTemplate(uint(22))
+	RegisterUserTemplate(uint(23))
 
-	viewName := fmt.Sprintf("%s.chats_view", keyspace)
-
-	query := fmt.Sprintf("SELECT chat_id,companion_id,chat_type,secured,last_msg_time,new_msg_count FROM %s WHERE secured = ? ALLOW FILTERING", viewName)
-	q := session.Query(query, false).PageSize(10).PageState(pageState)
+	query := fmt.Sprintf(` SELECT
+		chat_id,
+		companion_id,
+		chat_type,
+		secured,
+		last_updated,
+		new_msg_count
+	FROM
+		%s
+	WHERE
+		secured = ?
+		AND user_id = ?
+	ORDER BY
+		last_updated DESC ALLOW FILTERING;
+	`, keyspace)
+	q := session.Query(query, false, userID).PageSize(10).PageState(pageState)
 
 	iter := q.Iter()
 	defer iter.Close()
@@ -179,27 +205,45 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 // @Description Получает список чатов для указанного пользователя.
 // @Accept json
 // @Produce json
-// @Param user_id query string true "user_id"
+// @Param user_token query string true "Token пользователя"
 // @Param uuid query string true "UUID пользователя"
 // @Success 200 {object} map[string]interface{} "successful response"
 // @Failure 400 {object} map[string]interface{} "bad request"
 // @Router /chats/get-chats-secured [get]
 func GetChatsSecured(session *gocql.Session, c *gin.Context) {
-	userID := c.Query("user_id")
+	userTokenQuery := c.Query("user_token")
 
-	if userID == "" {
+	if userTokenQuery == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing user_id parameter"})
 		return
 	}
 
-	keyspace := fmt.Sprintf("keyspace_%s", userID)
+	userDataToToken, err := helpers.DecryptAES(userTokenQuery)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	userID := userDataToToken.User_id
 
-	registerUserTemplate(userID)
+	keyspace := fmt.Sprintf("user_%d.chats", userID)
 
-	viewName := fmt.Sprintf("%s.chats_view", keyspace)
+	querySecured := fmt.Sprintf(` SELECT
+		chat_id,
+		companion_id,
+		chat_type,
+		secured,
+		last_updated,
+		new_msg_count
+	FROM
+		%s
+	WHERE
+		secured = ?
+		AND user_id = ?
+	ORDER BY
+		last_updated DESC ALLOW FILTERING;
+	`, keyspace)
 
-	querySecured := fmt.Sprintf("SELECT chat_id, companion_id, chat_type, secured, last_msg_time, new_msg_count FROM %s WHERE secured = ? ALLOW FILTERING", viewName)
-	qSecured := session.Query(querySecured, true)
+	qSecured := session.Query(querySecured, true, userID)
 	iterSecured := qSecured.Iter()
 	defer iterSecured.Close()
 
@@ -263,16 +307,62 @@ func GetChatsSecured(session *gocql.Session, c *gin.Context) {
 // @Description Данные для создания чатов
 type CreateChatStruct struct {
 	Uuid         string `json:"uuid"`
-	User_id      string `json:"user_id"`
-	Companion_id string `json:"companion_id"`
+	User_token   string `json:"user_token"`
+	Companion_id uint   `json:"companion_id"`
 }
 
-func createChatInKeyspace(session *gocql.Session, chatID string, userID, companionID string) error {
-	keyspace := fmt.Sprintf("keyspace_%s", userID)
+func createChatInKeyspace(session *gocql.Session, chatID string, userID, companionID uint) (string, error) {
+	keyspace := fmt.Sprintf("user_%d", userID)
 	tableName := keyspace + ".chats"
 
-	insertQuery := `INSERT INTO ` + tableName + ` (chat_id, companion_id, chat_type, secured, muted, last_msg_time, new_msg_count) VALUES (?, ?, ?, ?, ?, ?, ?)`
-	return session.Query(insertQuery, chatID, companionID, "normal", false, false, time.Now(), 0).Exec()
+	var existingChatID string
+	var chatType string
+	var secured bool
+	var last_msg_time *time.Time
+	var muted bool
+	var newMsgCount int
+	var last_updated *time.Time
+
+	checkQuery := `SELECT
+		chat_id,
+		chat_type,
+		secured,
+		muted,
+		last_msg_time,
+		new_msg_count,
+		last_updated
+	FROM
+		user_21.chats
+	WHERE
+		companion_id = ?
+	LIMIT 1
+	ALLOW FILTERING;
+	`
+
+	if err := session.Query(checkQuery, companionID).Scan(&existingChatID, &chatType, &secured, &muted, &last_msg_time, &newMsgCount, &last_updated); err != nil {
+		if err != gocql.ErrNotFound {
+			return "", err
+		}
+		chatType = "chat"
+		secured = false
+		muted = false
+		newMsgCount = 0
+		last_msg_time = nil
+		existingChatID = chatID
+	} else {
+		deleteQuery := `DELETE FROM ` + tableName + ` WHERE user_id = ? AND last_updated = ? AND companion_id = ? AND chat_id = ?`
+		if err := session.Query(deleteQuery, userID, last_updated, companionID, existingChatID).Exec(); err != nil {
+			return "", err
+		}
+	}
+
+	insertQuery := `INSERT INTO ` + tableName + ` (chat_id,user_id, companion_id, chat_type, secured, muted,last_msg_time, new_msg_count, last_updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	if err := session.Query(insertQuery, existingChatID, userID, companionID, chatType, secured, muted, last_msg_time, newMsgCount, time.Now()).Exec(); err != nil {
+		return "", err
+	}
+
+	return existingChatID, nil
 }
 
 // @Tags Chats
@@ -291,19 +381,27 @@ func CreateChat(session *gocql.Session, c *gin.Context) {
 		return
 	}
 
-	chatID := uuid.New().String()
+	userDataToToken, err := helpers.DecryptAES(chatData.User_token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	newChatID := uuid.New().String()
+	userID := userDataToToken.User_id
 
-	if err := createChatInKeyspace(session, chatID, chatData.User_id, chatData.Companion_id); err != nil {
+	chatID, err := createChatInKeyspace(session, newChatID, userID, chatData.Companion_id)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create chat: %v", err)})
 		return
 	}
 
-	if err := createChatInKeyspace(session, chatID, chatData.Companion_id, chatData.User_id); err != nil {
+	_, err = createChatInKeyspace(session, newChatID, chatData.Companion_id, userID)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create chat for companion: %v", err)})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Chat setup successfully for both users"})
+	c.JSON(http.StatusOK, gin.H{"message": "Chat setup successfully for both users", "chat_id": chatID})
 }
 
 // FindChats retrieves chats for a user.
@@ -336,12 +434,12 @@ func FindChats(db *gorm.DB, c *gin.Context) {
 	for _, user := range users {
 		result := map[string]interface{}{
 			"user_id": user.ID,
-			"Name":    user.Name,
-			"SoName":  user.SoName,
-			"Nik":     user.Nik,
+			"name":    user.Name,
+			"soName":  user.SoName,
+			"nik":     user.Nik,
 		}
 		results = append(results, result)
 	}
 
-	c.JSON(http.StatusOK, gin.H{"users": results})
+	c.JSON(http.StatusOK, gin.H{"data": results})
 }

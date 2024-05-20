@@ -30,8 +30,12 @@ func removePadding(data []byte) []byte {
 	return data[:length-padding]
 }
 
+type UserData struct {
+	User_id uint
+}
+
 // EncryptAES шифрует данные с использованием AES
-func EncryptAES(data map[string]interface{}) (string, error) {
+func EncryptAES(data UserData) (string, error) {
 	secretKey := sha256.Sum256([]byte(os.Getenv("TOKEN_KEY")))
 	block, err := aes.NewCipher(secretKey[:])
 	if err != nil {
@@ -57,21 +61,21 @@ func EncryptAES(data map[string]interface{}) (string, error) {
 }
 
 // DecryptAES расшифровывает данные с использованием AES
-func DecryptAES(encrypted string) (map[string]interface{}, error) {
+func DecryptAES(encrypted string) (UserData, error) {
 	secretKey := sha256.Sum256([]byte(os.Getenv("TOKEN_KEY")))
 
 	ciphertext, err := base64.StdEncoding.DecodeString(encrypted)
 	if err != nil {
-		return nil, err
+		return UserData{}, err
 	}
 
 	block, err := aes.NewCipher(secretKey[:])
-	if err != nil { 
-		return nil, err
+	if err != nil {
+		return UserData{}, err
 	}
 
 	if len(ciphertext) < aes.BlockSize {
-		return nil, fmt.Errorf("ciphertext too short")
+		return UserData{}, fmt.Errorf("ciphertext too short")
 	}
 	iv := ciphertext[:aes.BlockSize]
 	ciphertext = ciphertext[aes.BlockSize:]
@@ -80,10 +84,10 @@ func DecryptAES(encrypted string) (map[string]interface{}, error) {
 	stream.CryptBlocks(ciphertext, ciphertext)
 	decryptedData := removePadding(ciphertext)
 
-	var data map[string]interface{}
+	var data UserData
 	err = json.Unmarshal(decryptedData, &data)
 	if err != nil {
-		return nil, err
+		return UserData{}, err
 	}
 
 	return data, nil
