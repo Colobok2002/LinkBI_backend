@@ -113,9 +113,9 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 
 	keyspace := fmt.Sprintf("user_%d.chats", userID)
 
-	RegisterUserTemplate(uint(21))
-	RegisterUserTemplate(uint(22))
-	RegisterUserTemplate(uint(23))
+	// RegisterUserTemplate(uint(21))
+	// RegisterUserTemplate(uint(22))
+	// RegisterUserTemplate(uint(23))
 
 	query := fmt.Sprintf(` SELECT
 		chat_id,
@@ -151,6 +151,7 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 			"chat_type":     chatType,
 			"secured":       secured,
 			"last_msg_time": lastMsgTime,
+			"lastMsg":       false,
 			"new_msg_count": newMsgCount,
 		}
 		chats = append(chats, chat)
