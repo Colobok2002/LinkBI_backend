@@ -46,19 +46,25 @@ func RegisterUserTemplate(userID uint) bool {
 		return false
 	}
 
-	// createViewQuery := fmt.Sprintf(`
-	// CREATE MATERIALIZED VIEW IF NOT EXISTS %s.chats_view AS
-	// SELECT *
-	// FROM %s.chats
-	// WHERE companion_id IS NOT NULL AND chat_id IS NOT NULL AND last_msg_time IS NOT NULL
-	// PRIMARY KEY (companion_id, chat_id, last_msg_time)
-	// WITH CLUSTERING ORDER BY (last_msg_time DESC)
-	// `, keyspace, keyspace)
+	createMessageTabelleQuery := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s.messages (
+		chat_id uuid,
+		message_id uuid,
+		sender_id bigint,
+		message_text TEXT,
+		created_at TIMESTAMP,
+		attachments LIST<TEXT>,
+		reactions MAP<TEXT, INT>,
+		reply_to_message_id UUID,
+		forwarded_from_chat_id UUID,
+		forwarded_from_message_id UUID,
+		PRIMARY KEY (chat_id, created_at, message_id)
+	) WITH CLUSTERING ORDER BY (created_at DESC);
+	`, keyspace)
 
-	// if err := session.Query(createViewQuery).Exec(); err != nil {
-	// 	log.Println("Failed to create materialized view:", err)
-	// 	return false
-	// }
+	if err := session.Query(createMessageTabelleQuery).Exec(); err != nil {
+		log.Println("Failed to create table:", err)
+		return false
+	}
 
 	return true
 
@@ -113,9 +119,9 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 
 	keyspace := fmt.Sprintf("user_%d.chats", userID)
 
-	// RegisterUserTemplate(uint(21))
-	// RegisterUserTemplate(uint(22))
-	// RegisterUserTemplate(uint(23))
+	RegisterUserTemplate(uint(21))
+	RegisterUserTemplate(uint(22))
+	RegisterUserTemplate(uint(23))
 
 	query := fmt.Sprintf(` SELECT
 		chat_id,

@@ -203,6 +203,95 @@ const docTemplate = `{
                 }
             }
         },
+        "/messages/add-message": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Message"
+                ],
+                "summary": "Запись сообщения",
+                "parameters": [
+                    {
+                        "description": "Данные для создания сообщения",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/messages.AddMessageStruct"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "successful response",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/messages/get-messages": {
+            "get": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Message"
+                ],
+                "summary": "Получение сообщений",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Chat ID",
+                        "name": "chat_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "User Token",
+                        "name": "user_token",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "successful response",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/messages.Message"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/token/generateToken": {
             "get": {
                 "produces": [
@@ -404,6 +493,63 @@ const docTemplate = `{
                 },
                 "uuid": {
                     "type": "string"
+                }
+            }
+        },
+        "messages.AddMessageStruct": {
+            "description": "Данные для создания сообщения",
+            "type": "object",
+            "properties": {
+                "chat_id": {
+                    "type": "string"
+                },
+                "forwarded_from_chat_id": {
+                    "type": "string"
+                },
+                "forwarded_from_message_id": {
+                    "type": "string"
+                },
+                "message_text": {
+                    "type": "string"
+                },
+                "reply_to_message_id": {
+                    "type": "string"
+                },
+                "user_token": {
+                    "type": "string"
+                }
+            }
+        },
+        "messages.Message": {
+            "type": "object",
+            "properties": {
+                "chat_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "forwarded_from_chat_id": {
+                    "type": "string"
+                },
+                "forwarded_from_message_id": {
+                    "type": "string"
+                },
+                "is_my_message": {
+                    "description": "New field",
+                    "type": "boolean"
+                },
+                "message_id": {
+                    "type": "string"
+                },
+                "message_text": {
+                    "type": "string"
+                },
+                "reply_to_message_id": {
+                    "type": "string"
+                },
+                "sender_id": {
+                    "type": "integer"
                 }
             }
         },
