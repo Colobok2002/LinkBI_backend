@@ -515,6 +515,9 @@ const docTemplate = `{
                 "reply_to_message_id": {
                     "type": "string"
                 },
+                "temporary_message_id": {
+                    "type": "string"
+                },
                 "user_token": {
                     "type": "string"
                 }
@@ -550,6 +553,9 @@ const docTemplate = `{
                 },
                 "sender_id": {
                     "type": "integer"
+                },
+                "temporary_message_id": {
+                    "type": "string"
                 }
             }
         },

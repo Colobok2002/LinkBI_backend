@@ -270,13 +270,13 @@ func chekTokenUser(db *gorm.DB, c *gin.Context) {
 
 	privateKeyPEM, err := client.Get(userData.Uuid + "_private_key").Result()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": ""})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Сессия была завершена"})
 		return
 	}
 
 	dToken, err := helpers.DecryptWithPrivateKey(userData.Token, privateKeyPEM)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Сессия была завершена"})
 		return
 
 	}

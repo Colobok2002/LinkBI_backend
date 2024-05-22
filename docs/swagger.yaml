@@ -22,6 +22,8 @@ definitions:
         type: string
       reply_to_message_id:
         type: string
+      temporary_message_id:
+        type: string
       user_token:
         type: string
     type: object
@@ -46,6 +48,8 @@ definitions:
         type: string
       sender_id:
         type: integer
+      temporary_message_id:
+        type: string
     type: object
   users.ErrorResponse:
     properties:

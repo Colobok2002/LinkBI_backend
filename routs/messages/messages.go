@@ -20,12 +20,26 @@ func MessageRouter(router *gin.Engine) {
 // AddMessageStruct represents the JSON
 // @Description Данные для создания сообщения
 type AddMessageStruct struct {
+	TemporaryMessageId     string  `json:"temporary_message_id"`
 	ChatID                 string  `json:"chat_id"`
 	UserToken              string  `json:"user_token"`
 	MessageText            string  `json:"message_text"`
 	ReplyToMessageID       *string `json:"reply_to_message_id"`
 	ForwardedFromChatID    *string `json:"forwarded_from_chat_id"`
 	ForwardedFromMessageID *string `json:"forwarded_from_message_id"`
+}
+
+type Message struct {
+	TemporaryMessageId     string      `json:"temporary_message_id"`
+	ChatID                 gocql.UUID  `json:"chat_id"`
+	MessageID              gocql.UUID  `json:"message_id"`
+	SenderID               uint        `json:"sender_id"`
+	MessageText            string      `json:"message_text"`
+	CreatedAt              time.Time   `json:"created_at"`
+	ReplyToMessageID       *gocql.UUID `json:"reply_to_message_id"`
+	ForwardedFromChatID    *gocql.UUID `json:"forwarded_from_chat_id"`
+	ForwardedFromMessageID *gocql.UUID `json:"forwarded_from_message_id"`
+	IsMyMessage            bool        `json:"is_my_message"` // New field
 }
 
 // @Tags Message
@@ -120,19 +134,21 @@ func AddMessage(session *gocql.Session, c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "Message added successfully"})
-}
+	newMessage := Message{
+		TemporaryMessageId:     messageData.TemporaryMessageId,
+		ChatID:                 chatID,
+		SenderID:               userID,
+		MessageID:              messageID,
+		MessageText:            messageData.MessageText,
+		CreatedAt:              createdAt,
+		ReplyToMessageID:       replyToMessageID,
+		ForwardedFromChatID:    forwardedFromChatID,
+		ForwardedFromMessageID: forwardedFromMessageID,
+		IsMyMessage:            true,
+	}
 
-type Message struct {
-	ChatID                 gocql.UUID  `json:"chat_id"`
-	MessageID              gocql.UUID  `json:"message_id"`
-	SenderID               uint        `json:"sender_id"`
-	MessageText            string      `json:"message_text"`
-	CreatedAt              time.Time   `json:"created_at"`
-	ReplyToMessageID       *gocql.UUID `json:"reply_to_message_id"`
-	ForwardedFromChatID    *gocql.UUID `json:"forwarded_from_chat_id"`
-	ForwardedFromMessageID *gocql.UUID `json:"forwarded_from_message_id"`
-	IsMyMessage            bool        `json:"is_my_message"` // New field
+	SendWsMessageToChat(chatID.String(), newMessage)
+	c.JSON(http.StatusOK, gin.H{"status": "Message added successfully"})
 }
 
 // @Tags Message

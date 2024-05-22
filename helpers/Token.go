@@ -24,10 +24,16 @@ func addPadding(data []byte, blockSize int) []byte {
 }
 
 // removePadding удаляет паддинг из данных в соответствии с PKCS#7
-func removePadding(data []byte) []byte {
+func removePadding(data []byte) ([]byte, error) {
 	length := len(data)
+	if length == 0 {
+		return nil, fmt.Errorf("data length is zero")
+	}
 	padding := int(data[length-1])
-	return data[:length-padding]
+	if padding > length {
+		return nil, fmt.Errorf("invalid padding size")
+	}
+	return data[:length-padding], nil
 }
 
 type UserData struct {
@@ -82,7 +88,10 @@ func DecryptAES(encrypted string) (UserData, error) {
 
 	stream := cipher.NewCBCDecrypter(block, iv)
 	stream.CryptBlocks(ciphertext, ciphertext)
-	decryptedData := removePadding(ciphertext)
+	decryptedData, err := removePadding(ciphertext)
+	if err != nil {
+		return UserData{}, err
+	}
 
 	var data UserData
 	err = json.Unmarshal(decryptedData, &data)

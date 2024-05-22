@@ -35,6 +35,7 @@ func main() {
 	tokens.TokensRouter(router)
 	chats.ChatRouter(router)
 	messages.MessageRouter(router)
+	messages.MessageRouterWs(router)
 
 	// Docs
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, ginSwagger.URL("/swagger-docs")))
