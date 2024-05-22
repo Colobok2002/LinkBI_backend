@@ -330,7 +330,7 @@ func createChatInKeyspace(session *gocql.Session, chatID string, userID, compani
 	var newMsgCount int
 	var last_updated *time.Time
 
-	checkQuery := `SELECT
+	checkQuery := fmt.Sprintf(`SELECT
 		chat_id,
 		chat_type,
 		secured,
@@ -339,17 +339,19 @@ func createChatInKeyspace(session *gocql.Session, chatID string, userID, compani
 		new_msg_count,
 		last_updated
 	FROM
-		user_21.chats
+		%s.chats
 	WHERE
 		companion_id = ?
 	LIMIT 1
 	ALLOW FILTERING;
-	`
+	`,keyspace)
 
+	log.Println(companionID)
 	if err := session.Query(checkQuery, companionID).Scan(&existingChatID, &chatType, &secured, &muted, &last_msg_time, &newMsgCount, &last_updated); err != nil {
 		if err != gocql.ErrNotFound {
 			return "", err
 		}
+		println(err)
 		chatType = "chat"
 		secured = false
 		muted = false
