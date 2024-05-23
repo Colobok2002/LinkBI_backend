@@ -344,14 +344,12 @@ func createChatInKeyspace(session *gocql.Session, chatID string, userID, compani
 		companion_id = ?
 	LIMIT 1
 	ALLOW FILTERING;
-	`,keyspace)
+	`, keyspace)
 
-	log.Println(companionID)
 	if err := session.Query(checkQuery, companionID).Scan(&existingChatID, &chatType, &secured, &muted, &last_msg_time, &newMsgCount, &last_updated); err != nil {
 		if err != gocql.ErrNotFound {
 			return "", err
 		}
-		println(err)
 		chatType = "chat"
 		secured = false
 		muted = false
@@ -409,7 +407,7 @@ func CreateChat(session *gocql.Session, c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create chat for companion: %v", err)})
 		return
 	}
-
+	// time.Sleep(20 * time.Second)
 	c.JSON(http.StatusOK, gin.H{"message": "Chat setup successfully for both users", "chat_id": chatID})
 }
 
@@ -428,8 +426,6 @@ func FindChats(db *gorm.DB, c *gin.Context) {
 	searchTerm := c.Query("search_term")
 	searchTerm = "%" + searchTerm + "%"
 	var users []models.User
-
-	log.Println(searchTerm)
 
 	if err := db.Model(&models.User{}).Select("ID", "Name", "SoName", "Nik").Where(
 		"LOWER(name) LIKE LOWER(?) OR LOWER(so_name) LIKE LOWER(?) OR LOWER(nik) LIKE LOWER(?)",
