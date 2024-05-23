@@ -79,7 +79,7 @@ func AddMessage(session *gocql.Session, c *gin.Context) {
 	var secured bool
 	var muted bool
 	var newMsgCount int
-	var lastUpdated time.Time
+	var lastUpdated *time.Time
 
 	if err := session.Query(queryCompanionDetID, chatID).Scan(&companionID, &chatType, &secured, &muted, &lastUpdated); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get chat details"})
@@ -90,8 +90,12 @@ func AddMessage(session *gocql.Session, c *gin.Context) {
 
 	queryCompanionNewMsgCount := fmt.Sprintf(`SELECT new_msg_count FROM %s.chats WHERE user_id = ? AND companion_id = ? AND chat_id = ? AND last_updated = ? ALLOW FILTERING;`, keyspaceCompanion)
 	if err := session.Query(queryCompanionNewMsgCount, companionID, userID, chatID, lastUpdated).Scan(&newMsgCount); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get new message count for companion"})
-		return
+		if err == gocql.ErrNotFound {
+			newMsgCount = 0
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get new message count for companion"})
+			return
+		}
 	}
 
 	messageID := gocql.TimeUUID()
