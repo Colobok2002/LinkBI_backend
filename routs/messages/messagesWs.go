@@ -59,13 +59,10 @@ func serveWs(session *gocql.Session, c *gin.Context) {
 		var msg Message
 		err := conn.ReadJSON(&msg)
 		if err != nil {
-			log.Println("Error reading json.", err)
 			break
 		}
-		log.Printf("Received message: %+v", msg)
 
 		if err = conn.WriteJSON(msg); err != nil {
-			log.Println("Error writing json.", err)
 			break
 		}
 	}
