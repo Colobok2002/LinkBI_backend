@@ -1,8 +1,7 @@
-package messages
+package chats
 
 import (
 	"Bmessage_backend/database"
-	"Bmessage_backend/helpers"
 	"log"
 	"net/http"
 	"sync"
@@ -30,12 +29,12 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func MessageRouterWs(router *gin.Engine) {
+func ChatsRouterWs(router *gin.Engine) {
 	routeBase := "messages/"
-	router.GET(routeBase+"events-messages", database.WithDatabaseScylla(messageConnectorWs))
+	router.GET(routeBase+"events-messages", database.WithDatabaseScylla(cahtsConnectorWs))
 }
 
-func messageConnectorWs(session *gocql.Session, c *gin.Context) {
+func cahtsConnectorWs(session *gocql.Session, c *gin.Context) {
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Println("Failed to set websocket upgrade:", err)
@@ -56,7 +55,7 @@ func messageConnectorWs(session *gocql.Session, c *gin.Context) {
 	defer removeConnection(chatID, conn)
 
 	for {
-		var msg Message
+		var msg interface{}
 		err := conn.ReadJSON(&msg)
 		if err != nil {
 			break
@@ -86,28 +85,28 @@ func removeConnection(chatID string, conn *websocket.Conn) {
 	}
 }
 
-func SendWsMessageToChat(chatID string, messageData Message) {
-	connectionsMu.Lock()
-	defer connectionsMu.Unlock()
+// func UpdeteDataChat(chatID string, chatData Message) {
+// 	connectionsMu.Lock()
+// 	defer connectionsMu.Unlock()
 
-	conns, ok := connections[chatID]
-	if !ok {
-		log.Printf("No connections found for chatId: %s", chatID)
-		return
-	}
+// 	conns, ok := connections[chatID]
+// 	if !ok {
+// 		log.Printf("No connections found for chatId: %s", chatID)
+// 		return
+// 	}
 
-	for _, conn := range conns {
-		userToken := conn.UserToken
-		userDataToToken, err := helpers.DecryptAES(userToken)
-		if err != nil {
-			log.Println("Error writing json to connection:", err)
-			return
-		}
+// 	for _, conn := range conns {
+// 		userToken := conn.UserToken
+// 		userDataToToken, err := helpers.DecryptAES(userToken)
+// 		if err != nil {
+// 			log.Println("Error writing json to connection:", err)
+// 			return
+// 		}
 
-		userID := userDataToToken.User_id
-		messageData.IsMyMessage = (userID == messageData.SenderID)
-		if err := conn.WS.WriteJSON(gin.H{"newMessage": messageData}); err != nil {
-			log.Println("Error writing json to connection:", err)
-		}
-	}
-}
+// 		userID := userDataToToken.User_id
+// 		messageData.IsMyMessage = (userID == messageData.SenderID)
+// 		if err := conn.WS.WriteJSON(gin.H{"newMessage": messageData}); err != nil {
+// 			log.Println("Error writing json to connection:", err)
+// 		}
+// 	}
+// }

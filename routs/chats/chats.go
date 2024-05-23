@@ -117,18 +117,15 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 		}
 	}
 
-	keyspace := fmt.Sprintf("user_%d.chats", userID)
+	keyspaceChats := fmt.Sprintf("user_%d.chats", userID)
+	keyspaceMessages := fmt.Sprintf("user_%d.messages", userID)
 
-	RegisterUserTemplate(uint(21))
-	RegisterUserTemplate(uint(22))
-	RegisterUserTemplate(uint(23))
-
-	query := fmt.Sprintf(` SELECT
+	query := fmt.Sprintf(`SELECT
 		chat_id,
 		companion_id,
 		chat_type,
 		secured,
-		last_updated,
+		last_msg_time,
 		new_msg_count
 	FROM
 		%s
@@ -137,7 +134,7 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 		AND user_id = ?
 	ORDER BY
 		last_updated DESC ALLOW FILTERING;
-	`, keyspace)
+	`, keyspaceChats)
 	q := session.Query(query, false, userID).PageSize(10).PageState(pageState)
 
 	iter := q.Iter()
@@ -147,22 +144,26 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 	var chatID gocql.UUID
 	var companionID, chatType string
 	var secured bool
-	var lastMsgTime time.Time
+	var lastMsgTime *time.Time
 	var newMsgCount int
 
 	for iter.Scan(&chatID, &companionID, &chatType, &secured, &lastMsgTime, &newMsgCount) {
+		var lastMsgTimeValue interface{}
+		if lastMsgTime != nil {
+			lastMsgTimeValue = *lastMsgTime
+		} else {
+			lastMsgTimeValue = nil
+		}
 		chat := map[string]interface{}{
 			"chat_id":       chatID,
 			"companion_id":  companionID,
 			"chat_type":     chatType,
 			"secured":       secured,
-			"last_msg_time": lastMsgTime,
-			"lastMsg":       false,
+			"last_msg_time": lastMsgTimeValue,
 			"new_msg_count": newMsgCount,
 		}
 		chats = append(chats, chat)
 	}
-
 	if err := iter.Close(); err != nil {
 		log.Println(err)
 		return
@@ -170,7 +171,6 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 	nextPageState := iter.PageState()
 
 	var companionIDs []string
-
 	for _, chat := range chats {
 		companionIDs = append(companionIDs, chat["companion_id"].(string))
 	}
@@ -200,10 +200,20 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 			chats[i]["companion_so_name"] = user.SoName
 			chats[i]["companion_nik"] = user.Nik
 		}
+		queryLastMessage := fmt.Sprintf(`SELECT sender_id, message_text FROM %s WHERE chat_id = ? ORDER BY created_at DESC LIMIT 1`, keyspaceMessages)
+		var lastMessageSenderID *uint
+		var lastMessageText *string
+
+		if err := session.Query(queryLastMessage, chat["chat_id"]).Scan(&lastMessageSenderID, &lastMessageText); err != nil {
+			lastMessageSenderID = nil
+			lastMessageText = nil
+		}
+
+		chats[i]["last_msg"] = lastMessageText
+		chats[i]["IsMyMessage"] = lastMessageSenderID != nil && *lastMessageSenderID == userID
 	}
 
 	c.JSON(http.StatusOK, gin.H{"chats": chats, "nextPageState": nextPageState})
-
 }
 
 // GetChatsSecured retrieves chats for a user.

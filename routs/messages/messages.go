@@ -72,17 +72,16 @@ func AddMessage(session *gocql.Session, c *gin.Context) {
 
 	userID := userDataToToken.User_id
 	keyspaceUser := fmt.Sprintf("user_%d", userID)
-	queryCompanionDetID := fmt.Sprintf(`SELECT companion_id, chat_type, secured, muted, last_msg_time, last_updated FROM %s.chats WHERE chat_id = ? ALLOW FILTERING;`, keyspaceUser)
+	queryCompanionDetID := fmt.Sprintf(`SELECT companion_id, chat_type, secured, muted, last_updated FROM %s.chats WHERE chat_id = ? ALLOW FILTERING;`, keyspaceUser)
 
 	var companionID string
 	var chatType string
 	var secured bool
 	var muted bool
 	var newMsgCount int
-	var lastMsgTime time.Time
 	var lastUpdated time.Time
 
-	if err := session.Query(queryCompanionDetID, chatID).Scan(&companionID, &chatType, &secured, &muted, &lastMsgTime, &lastUpdated); err != nil {
+	if err := session.Query(queryCompanionDetID, chatID).Scan(&companionID, &chatType, &secured, &muted, &lastUpdated); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get chat details"})
 		return
 	}
@@ -147,7 +146,7 @@ func AddMessage(session *gocql.Session, c *gin.Context) {
 	}
 
 	insertChatUser := fmt.Sprintf(`INSERT INTO %s.chats (user_id, chat_id, companion_id, chat_type, secured, muted, new_msg_count, last_msg_time, last_updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, keyspaceUser)
-	if err := session.Query(insertChatUser, userID, chatID, companionID, chatType, secured, muted, 0, lastMsgTime, createdAt).Exec(); err != nil {
+	if err := session.Query(insertChatUser, userID, chatID, companionID, chatType, secured, muted, 0, createdAt, createdAt).Exec(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert new chat for user"})
 		return
 	}
@@ -159,7 +158,7 @@ func AddMessage(session *gocql.Session, c *gin.Context) {
 	}
 
 	insertChatCompanion := fmt.Sprintf(`INSERT INTO %s.chats (user_id, chat_id, companion_id, chat_type, secured, muted, new_msg_count, last_msg_time, last_updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, keyspaceCompanion)
-	if err := session.Query(insertChatCompanion, companionID, chatID, userID, chatType, secured, muted, newMsgCount+1, lastMsgTime, createdAt).Exec(); err != nil {
+	if err := session.Query(insertChatCompanion, companionID, chatID, userID, chatType, secured, muted, newMsgCount+1, createdAt, createdAt).Exec(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert new chat for companion"})
 		return
 	}
