@@ -72,7 +72,7 @@ func AddMessage(session *gocql.Session, c *gin.Context) {
 
 	userID := userDataToToken.User_id
 	keyspaceUser := fmt.Sprintf("user_%d", userID)
-	queryCompanionDetID := fmt.Sprintf(`SELECT companion_id, chat_type, secured, muted, new_msg_count, last_msg_time, last_updated FROM %s.chats WHERE chat_id = ? ALLOW FILTERING;`, keyspaceUser)
+	queryCompanionDetID := fmt.Sprintf(`SELECT companion_id, chat_type, secured, muted, last_msg_time, last_updated FROM %s.chats WHERE chat_id = ? ALLOW FILTERING;`, keyspaceUser)
 
 	var companionID string
 	var chatType string
@@ -82,12 +82,18 @@ func AddMessage(session *gocql.Session, c *gin.Context) {
 	var lastMsgTime time.Time
 	var lastUpdated time.Time
 
-	if err := session.Query(queryCompanionDetID, chatID).Scan(&companionID, &chatType, &secured, &muted, &newMsgCount, &lastMsgTime, &lastUpdated); err != nil {
+	if err := session.Query(queryCompanionDetID, chatID).Scan(&companionID, &chatType, &secured, &muted, &lastMsgTime, &lastUpdated); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get chat details"})
 		return
 	}
 
 	keyspaceCompanion := fmt.Sprintf("user_%s", companionID)
+
+	queryCompanionNewMsgCount := fmt.Sprintf(`SELECT new_msg_count FROM %s.chats WHERE user_id = ? AND companion_id = ? AND chat_id = ? AND last_updated = ? ALLOW FILTERING;`, keyspaceCompanion)
+	if err := session.Query(queryCompanionNewMsgCount, companionID, userID, chatID, lastUpdated).Scan(&newMsgCount); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get new message count for companion"})
+		return
+	}
 
 	messageID := gocql.TimeUUID()
 	createdAt := time.Now()
@@ -134,23 +140,21 @@ func AddMessage(session *gocql.Session, c *gin.Context) {
 		return
 	}
 
-	// Delete existing chat records using the last_updated value
 	deleteChatUser := fmt.Sprintf(`DELETE FROM %s.chats WHERE user_id = ? AND companion_id = ? AND chat_id = ? AND last_updated = ?`, keyspaceUser)
 	if err := session.Query(deleteChatUser, userID, companionID, chatID, lastUpdated).Exec(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete existing chat for user"})
 		return
 	}
 
-	deleteChatCompanion := fmt.Sprintf(`DELETE FROM %s.chats WHERE user_id = ? AND companion_id = ? AND chat_id = ? AND last_updated = ?`, keyspaceCompanion)
-	if err := session.Query(deleteChatCompanion, companionID, userID, chatID, lastUpdated).Exec(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete existing chat for companion"})
+	insertChatUser := fmt.Sprintf(`INSERT INTO %s.chats (user_id, chat_id, companion_id, chat_type, secured, muted, new_msg_count, last_msg_time, last_updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, keyspaceUser)
+	if err := session.Query(insertChatUser, userID, chatID, companionID, chatType, secured, muted, 0, lastMsgTime, createdAt).Exec(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert new chat for user"})
 		return
 	}
 
-	// Insert new chat records with updated last_updated and new_msg_count
-	insertChatUser := fmt.Sprintf(`INSERT INTO %s.chats (user_id, chat_id, companion_id, chat_type, secured, muted, new_msg_count, last_msg_time, last_updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, keyspaceUser)
-	if err := session.Query(insertChatUser, userID, chatID, companionID, chatType, secured, muted, newMsgCount+1, lastMsgTime, createdAt).Exec(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert new chat for user"})
+	deleteChatCompanion := fmt.Sprintf(`DELETE FROM %s.chats WHERE user_id = ? AND companion_id = ? AND chat_id = ? AND last_updated = ?`, keyspaceCompanion)
+	if err := session.Query(deleteChatCompanion, companionID, userID, chatID, lastUpdated).Exec(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete existing chat for companion"})
 		return
 	}
 
