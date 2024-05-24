@@ -31,7 +31,7 @@ var upgrader = websocket.Upgrader{
 }
 
 func MessageRouterWs(router *gin.Engine) {
-	routeBase := "messages/"
+	routeBase := "messagesWS/"
 	router.GET(routeBase+"events-messages", database.WithDatabaseScylla(messageConnectorWs))
 }
 

@@ -27,7 +27,8 @@ services:
     environment:
       POSTGRES_DB: bmessage_data_db
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: DN2LcGWkZkB5sQjiViKJpG45dTrFoDwKmooZxVsHB5ah0Mtxw7kYzPGeWF63C0p4Kd1VaYW0mUff0Kaqv9z52ugC18FvrXbGRrL6 # Пароль
+      POSTGRES_PASSWORD: DN2LcGWkZkB5sQjiViKJpG45dTrFoDwKmooZxVsHB5ah0Mtxw7kYzPGeWF63C0p4Kd1VaYW0mUff0Kaqv9z52ugC18FvrXbGRrL6
+    command: postgres -c 'max_connections=10000'
     ports:
       - "9999:5432"
     volumes:

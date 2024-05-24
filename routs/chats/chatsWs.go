@@ -30,8 +30,8 @@ var upgrader = websocket.Upgrader{
 }
 
 func ChatsRouterWs(router *gin.Engine) {
-	routeBase := "messages/"
-	router.GET(routeBase+"events-messages", database.WithDatabaseScylla(cahtsConnectorWs))
+	routeBase := "chatsWS/"
+	router.GET(routeBase+"events-chats", database.WithDatabaseScylla(cahtsConnectorWs))
 }
 
 func cahtsConnectorWs(session *gocql.Session, c *gin.Context) {
