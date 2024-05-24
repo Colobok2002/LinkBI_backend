@@ -3,6 +3,7 @@ package messages
 import (
 	"Bmessage_backend/database"
 	"Bmessage_backend/helpers"
+	"Bmessage_backend/routs/chats"
 	"fmt"
 	"net/http"
 	"time"
@@ -74,7 +75,7 @@ func AddMessage(session *gocql.Session, c *gin.Context) {
 	keyspaceUser := fmt.Sprintf("user_%d", userID)
 	queryCompanionDetID := fmt.Sprintf(`SELECT companion_id, chat_type, secured, muted, last_updated FROM %s.chats WHERE chat_id = ? ALLOW FILTERING;`, keyspaceUser)
 
-	var companionID string
+	var companionID uint
 	var chatType string
 	var secured bool
 	var muted bool
@@ -86,7 +87,7 @@ func AddMessage(session *gocql.Session, c *gin.Context) {
 		return
 	}
 
-	keyspaceCompanion := fmt.Sprintf("user_%s", companionID)
+	keyspaceCompanion := fmt.Sprintf("user_%d", companionID)
 
 	queryCompanionNewMsgCount := fmt.Sprintf(`SELECT new_msg_count FROM %s.chats WHERE user_id = ? AND companion_id = ? AND chat_id = ? AND last_updated = ? ALLOW FILTERING;`, keyspaceCompanion)
 	if err := session.Query(queryCompanionNewMsgCount, companionID, userID, chatID, lastUpdated).Scan(&newMsgCount); err != nil {
@@ -180,6 +181,8 @@ func AddMessage(session *gocql.Session, c *gin.Context) {
 		IsMyMessage:            true,
 	}
 
+	chats.UpdeteDataChat(userID, chatID)
+	chats.UpdeteDataChat(companionID, chatID)
 	SendWsMessageToChat(chatID.String(), newMessage)
 	c.JSON(http.StatusOK, gin.H{"status": "Message added successfully"})
 }

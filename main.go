@@ -34,6 +34,7 @@ func main() {
 	users.UsersRouter(router)
 	tokens.TokensRouter(router)
 	chats.ChatRouter(router)
+	chats.ChatsRouterWs(router)
 	messages.MessageRouter(router)
 	messages.MessageRouterWs(router)
 

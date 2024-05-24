@@ -78,6 +78,20 @@ func ChatRouter(router *gin.Engine) {
 	router.GET(routeBase+"find-chats", database.WithDatabase(FindChats))
 }
 
+type Chat struct {
+	ChatID          gocql.UUID  `json:"chat_id"`
+	CompanionID     string      `json:"companion_id"`
+	CompanionName   string      `json:"companion_name,omitempty"`
+	CompanionSoName string      `json:"companion_so_name,omitempty"`
+	CompanionNik    string      `json:"companion_nik,omitempty"`
+	ChatType        string      `json:"chat_type"`
+	Secured         bool        `json:"secured"`
+	LastMsgTime     interface{} `json:"last_msg_time"`
+	NewMsgCount     int         `json:"new_msg_count"`
+	LastMsg         *string     `json:"last_msg,omitempty"`
+	IsMyMessage     bool        `json:"is_my_message"`
+}
+
 // GetChats retrieves chats for a user.
 // @Tags Chats
 // @Summary Получение чатов пользователя
@@ -140,7 +154,7 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 	iter := q.Iter()
 	defer iter.Close()
 
-	var chats []map[string]interface{}
+	var chats []Chat
 	var chatID gocql.UUID
 	var companionID, chatType string
 	var secured bool
@@ -154,15 +168,15 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 		} else {
 			lastMsgTimeValue = nil
 		}
-		chat := map[string]interface{}{
-			"chat_id":       chatID,
-			"companion_id":  companionID,
-			"chat_type":     chatType,
-			"secured":       secured,
-			"last_msg_time": lastMsgTimeValue,
-			"new_msg_count": newMsgCount,
-		}
-		chats = append(chats, chat)
+		chats = append(chats, Chat{
+			ChatID:      chatID,
+			CompanionID: companionID,
+			ChatType:    chatType,
+			Secured:     secured,
+			LastMsgTime: lastMsgTimeValue,
+			NewMsgCount: newMsgCount,
+		})
+
 	}
 	if err := iter.Close(); err != nil {
 		log.Println(err)
@@ -172,7 +186,7 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 
 	var companionIDs []string
 	for _, chat := range chats {
-		companionIDs = append(companionIDs, chat["companion_id"].(string))
+		companionIDs = append(companionIDs, chat.CompanionID)
 	}
 
 	db, err := database.GetDb()
@@ -194,23 +208,23 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 		userMap[strID] = user
 	}
 
-	for i, chat := range chats {
-		if user, ok := userMap[chat["companion_id"].(string)]; ok {
-			chats[i]["companion_name"] = user.Name
-			chats[i]["companion_so_name"] = user.SoName
-			chats[i]["companion_nik"] = user.Nik
+	for i := range chats {
+		if user, ok := userMap[chats[i].CompanionID]; ok {
+			chats[i].CompanionName = user.Name
+			chats[i].CompanionSoName = user.SoName
+			chats[i].CompanionNik = user.Nik
 		}
 		queryLastMessage := fmt.Sprintf(`SELECT sender_id, message_text FROM %s WHERE chat_id = ? ORDER BY created_at DESC LIMIT 1`, keyspaceMessages)
 		var lastMessageSenderID *uint
 		var lastMessageText *string
 
-		if err := session.Query(queryLastMessage, chat["chat_id"]).Scan(&lastMessageSenderID, &lastMessageText); err != nil {
+		if err := session.Query(queryLastMessage, chats[i].ChatID).Scan(&lastMessageSenderID, &lastMessageText); err != nil {
 			lastMessageSenderID = nil
 			lastMessageText = nil
 		}
 
-		chats[i]["last_msg"] = lastMessageText
-		chats[i]["IsMyMessage"] = lastMessageSenderID != nil && *lastMessageSenderID == userID
+		chats[i].LastMsg = lastMessageText
+		chats[i].IsMyMessage = lastMessageSenderID != nil && *lastMessageSenderID == userID
 	}
 
 	c.JSON(http.StatusOK, gin.H{"chats": chats, "nextPageState": nextPageState})
@@ -457,4 +471,78 @@ func FindChats(db *gorm.DB, c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": results})
+}
+
+func GetChatDetails(userID uint, chatID gocql.UUID) (Chat, error) {
+	var chat Chat
+
+	session, err := database.GetSession()
+	if err != nil {
+		return chat, err
+	}
+	defer session.Close()
+
+	keyspaceChats := fmt.Sprintf("user_%d.chats", userID)
+	keyspaceMessages := fmt.Sprintf("user_%d.messages", userID)
+
+	query := fmt.Sprintf(`SELECT
+		chat_id,
+		companion_id,
+		chat_type,
+		secured,
+		last_msg_time,
+		new_msg_count
+	FROM
+		%s
+	WHERE
+		chat_id = ?
+	ALLOW FILTERING;
+	`, keyspaceChats)
+
+	var lastMsgTime *time.Time
+	if err := session.Query(query, chatID).Scan(
+		&chat.ChatID, &chat.CompanionID, &chat.ChatType, &chat.Secured, &lastMsgTime, &chat.NewMsgCount,
+	); err != nil {
+		return chat, fmt.Errorf("failed to fetch chat details: %v", err)
+	}
+
+	if lastMsgTime != nil {
+		chat.LastMsgTime = *lastMsgTime
+	} else {
+		chat.LastMsgTime = nil
+	}
+
+	db, err := database.GetDb()
+	if err != nil {
+		return chat, fmt.Errorf("failed to connect to the database: %v", err)
+	}
+
+	var users []models.User
+	if err := db.Where("id IN ?", []string{fmt.Sprintf("%d", userID), chat.CompanionID}).Find(&users).Error; err != nil {
+		log.Println("Failed to fetch users from PostgreSQL:", err)
+		return chat, fmt.Errorf("failed to fetch users: %v", err)
+	}
+
+	for _, user := range users {
+		if fmt.Sprintf("%d", user.ID) == fmt.Sprintf("%d", userID) {
+		} else if fmt.Sprintf("%d", user.ID) == chat.CompanionID {
+			chat.CompanionName = user.Name
+			chat.CompanionSoName = user.SoName
+			chat.CompanionNik = user.Nik
+		}
+	}
+
+	queryLastMessage := fmt.Sprintf(`SELECT sender_id, message_text FROM %s WHERE chat_id = ? ORDER BY created_at DESC LIMIT 1`, keyspaceMessages)
+	var lastMessageSenderID *uint
+	var lastMessageText *string
+
+	if err := session.Query(queryLastMessage, chat.ChatID).Scan(&lastMessageSenderID, &lastMessageText); err != nil {
+		lastMessageSenderID = nil
+		lastMessageText = nil
+	}
+
+	chat.LastMsg = lastMessageText
+	chat.IsMyMessage = lastMessageSenderID != nil && *lastMessageSenderID == userID
+
+	return chat, nil
 }

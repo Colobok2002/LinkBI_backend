@@ -2,6 +2,7 @@ package chats
 
 import (
 	"Bmessage_backend/database"
+	"Bmessage_backend/helpers"
 	"log"
 	"net/http"
 	"sync"
@@ -17,7 +18,7 @@ type ConnectionData struct {
 }
 
 var (
-	connections   = make(map[string][]ConnectionData)
+	connections   = make(map[uint][]ConnectionData)
 	connectionsMu sync.Mutex
 )
 
@@ -42,17 +43,21 @@ func cahtsConnectorWs(session *gocql.Session, c *gin.Context) {
 	}
 	defer conn.Close()
 
-	chatID := c.Query("chatId")
 	userToken := c.Query("userToken")
-
-	wsData := ConnectionData{
-		WS:        conn,
-		UserToken: userToken,
+	userDataToToken, err := helpers.DecryptAES(userToken)
+	if err != nil {
+		log.Println("Error writing json to connection:", err)
+		return
 	}
 
-	addConnection(chatID, wsData)
-	log.Println(connections)
-	defer removeConnection(chatID, conn)
+	userID := userDataToToken.User_id
+
+	wsData := ConnectionData{
+		WS: conn,
+	}
+
+	addConnection(userID, wsData)
+	defer removeConnection(userID, conn)
 
 	for {
 		var msg interface{}
@@ -67,46 +72,37 @@ func cahtsConnectorWs(session *gocql.Session, c *gin.Context) {
 	}
 }
 
-func addConnection(chatID string, data ConnectionData) {
+func addConnection(userID uint, data ConnectionData) {
 	connectionsMu.Lock()
 	defer connectionsMu.Unlock()
-	connections[chatID] = append(connections[chatID], data)
+	connections[userID] = append(connections[userID], data)
 }
 
-func removeConnection(chatID string, conn *websocket.Conn) {
+func removeConnection(userID uint, conn *websocket.Conn) {
 	connectionsMu.Lock()
 	defer connectionsMu.Unlock()
-	conns := connections[chatID]
+	conns := connections[userID]
 	for i, c := range conns {
 		if c.WS == conn {
-			connections[chatID] = append(conns[:i], conns[i+1:]...)
+			connections[userID] = append(conns[:i], conns[i+1:]...)
 			break
 		}
 	}
 }
 
-// func UpdeteDataChat(chatID string, chatData Message) {
-// 	connectionsMu.Lock()
-// 	defer connectionsMu.Unlock()
+func UpdeteDataChat(userID uint, chatID gocql.UUID) {
+	connectionsMu.Lock()
+	defer connectionsMu.Unlock()
 
-// 	conns, ok := connections[chatID]
-// 	if !ok {
-// 		log.Printf("No connections found for chatId: %s", chatID)
-// 		return
-// 	}
+	chatData, _ := GetChatDetails(userID, chatID)
+	conns, ok := connections[userID]
+	if !ok {
+		return
+	}
 
-// 	for _, conn := range conns {
-// 		userToken := conn.UserToken
-// 		userDataToToken, err := helpers.DecryptAES(userToken)
-// 		if err != nil {
-// 			log.Println("Error writing json to connection:", err)
-// 			return
-// 		}
-
-// 		userID := userDataToToken.User_id
-// 		messageData.IsMyMessage = (userID == messageData.SenderID)
-// 		if err := conn.WS.WriteJSON(gin.H{"newMessage": messageData}); err != nil {
-// 			log.Println("Error writing json to connection:", err)
-// 		}
-// 	}
-// }
+	for _, conn := range conns {
+		if err := conn.WS.WriteJSON(gin.H{"chatUpdate": chatData}); err != nil {
+			log.Println("Error writing json to connection:", err)
+		}
+	}
+}
