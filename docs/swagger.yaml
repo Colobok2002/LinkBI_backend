@@ -223,38 +223,6 @@ paths:
       summary: Получение чатов пользователя
       tags:
       - Chats
-  /chats/get-chats-secured:
-    get:
-      consumes:
-      - application/json
-      description: Получает список чатов для указанного пользователя.
-      parameters:
-      - description: Token пользователя
-        in: query
-        name: user_token
-        required: true
-        type: string
-      - description: UUID пользователя
-        in: query
-        name: uuid
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: successful response
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: bad request
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Получение чатов пользователя
-      tags:
-      - Chats
   /messages/add-message:
     post:
       consumes:
