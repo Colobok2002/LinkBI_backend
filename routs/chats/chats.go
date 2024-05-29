@@ -4,6 +4,7 @@ import (
 	"Bmessage_backend/database"
 	"Bmessage_backend/helpers"
 	"Bmessage_backend/models"
+	"Bmessage_backend/routs/tokens"
 	"encoding/base64"
 	"fmt"
 	"log"
@@ -37,6 +38,7 @@ func RegisterUserTemplate(userID uint) bool {
 		new_msg_count int,
 		last_msg_time timestamp,
 		last_updated timestamp,
+		private_key text,
 		PRIMARY KEY (user_id,last_updated, companion_id, chat_id)
 	) WITH CLUSTERING ORDER BY (last_updated DESC);
 	`, keyspace)
@@ -46,7 +48,7 @@ func RegisterUserTemplate(userID uint) bool {
 		return false
 	}
 
-	createMessageTabelleQuery := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s.messages (
+	createMessageTableQuery := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s.messages (
 		chat_id uuid,
 		message_id uuid,
 		sender_id bigint,
@@ -57,11 +59,12 @@ func RegisterUserTemplate(userID uint) bool {
 		reply_to_message_id UUID,
 		forwarded_from_chat_id UUID,
 		forwarded_from_message_id UUID,
+		read boolean,
 		PRIMARY KEY (chat_id, created_at, message_id)
 	) WITH CLUSTERING ORDER BY (created_at DESC);
 	`, keyspace)
 
-	if err := session.Query(createMessageTabelleQuery).Exec(); err != nil {
+	if err := session.Query(createMessageTableQuery).Exec(); err != nil {
 		log.Println("Failed to create table:", err)
 		return false
 	}
@@ -91,6 +94,7 @@ type Chat struct {
 	LastMsg         *string     `json:"last_msg,omitempty"`
 	LastUpdated     interface{} `json:"last_updated,omitempty"`
 	IsMyMessage     bool        `json:"is_my_message"`
+	PrivateKey      string      `json:"-"`
 }
 
 // GetChats retrieves chats for a user.
@@ -107,6 +111,10 @@ type Chat struct {
 // @Router /chats/get-chats [get]
 func GetChats(session *gocql.Session, c *gin.Context) {
 	userTokenQuery := c.Query("user_token")
+
+	// RegisterUserTemplate(21)
+	// RegisterUserTemplate(22)
+	// RegisterUserTemplate(23)
 
 	if userTokenQuery == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing user_id parameter"})
@@ -142,7 +150,8 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 		secured,
 		last_msg_time,
 		last_updated,
-		new_msg_count
+		new_msg_count,
+		private_key
 	FROM
 		%s
 	WHERE
@@ -161,8 +170,9 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 	var secured bool
 	var lastMsgTime, lastUpdated *time.Time
 	var newMsgCount int
+	var privateKey string
 
-	for iter.Scan(&chatID, &companionID, &chatType, &secured, &lastMsgTime, &lastUpdated, &newMsgCount) {
+	for iter.Scan(&chatID, &companionID, &chatType, &secured, &lastMsgTime, &lastUpdated, &newMsgCount, &privateKey) {
 		var lastMsgTimeValue, lastUpdateTimeValue interface{}
 		if lastMsgTime != nil {
 			lastMsgTimeValue = *lastMsgTime
@@ -184,6 +194,9 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 			LastMsgTime: lastMsgTimeValue,
 			NewMsgCount: newMsgCount,
 			LastUpdated: lastUpdateTimeValue,
+			LastMsg:     nil,
+			IsMyMessage: false,
+			PrivateKey:  privateKey,
 		})
 	}
 
@@ -223,6 +236,7 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 			chats[i].CompanionSoName = user.SoName
 			chats[i].CompanionNik = user.Nik
 		}
+
 		queryLastMessage := fmt.Sprintf(`SELECT sender_id, message_text FROM %s WHERE chat_id = ? ORDER BY created_at DESC LIMIT 1`, keyspaceMessages)
 		var lastMessageSenderID *uint
 		var lastMessageText *string
@@ -230,10 +244,19 @@ func GetChats(session *gocql.Session, c *gin.Context) {
 		if err := session.Query(queryLastMessage, chats[i].ChatID).Scan(&lastMessageSenderID, &lastMessageText); err != nil {
 			lastMessageSenderID = nil
 			lastMessageText = nil
+		} else {
+			chats[i].IsMyMessage = lastMessageSenderID != nil && *lastMessageSenderID == userID
+			if lastMessageText != nil {
+				decryptedText, err := helpers.DecryptWithPrivateKey(*lastMessageText, chats[i].PrivateKey)
+				if err != nil {
+					log.Println(err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decrypt message"})
+					return
+				}
+				chats[i].LastMsg = &decryptedText
+				chats[i].PrivateKey = ""
+			}
 		}
-
-		chats[i].LastMsg = lastMessageText
-		chats[i].IsMyMessage = lastMessageSenderID != nil && *lastMessageSenderID == userID
 	}
 
 	c.JSON(http.StatusOK, gin.H{"chats": chats, "nextPageState": nextPageState})
@@ -248,7 +271,7 @@ type CreateChatStruct struct {
 	Companion_id uint   `json:"companion_id"`
 }
 
-func createChatInKeyspace(session *gocql.Session, chatID gocql.UUID, userID, companionID uint) (gocql.UUID, error) {
+func createChatInKeyspace(session *gocql.Session, chatID gocql.UUID, userID, companionID uint, _last_updated time.Time) (gocql.UUID, error) {
 	keyspace := fmt.Sprintf("user_%d", userID)
 	tableName := keyspace + ".chats"
 
@@ -259,6 +282,7 @@ func createChatInKeyspace(session *gocql.Session, chatID gocql.UUID, userID, com
 	var muted bool
 	var newMsgCount int
 	var last_updated *time.Time
+	var privateKey string
 
 	checkQuery := fmt.Sprintf(`SELECT
 		chat_id,
@@ -267,7 +291,8 @@ func createChatInKeyspace(session *gocql.Session, chatID gocql.UUID, userID, com
 		muted,
 		last_msg_time,
 		new_msg_count,
-		last_updated
+		last_updated,
+		private_key
 	FROM
 		%s.chats
 	WHERE
@@ -276,7 +301,7 @@ func createChatInKeyspace(session *gocql.Session, chatID gocql.UUID, userID, com
 	ALLOW FILTERING;
 	`, keyspace)
 
-	if err := session.Query(checkQuery, companionID).Scan(&existingChatID, &chatType, &secured, &muted, &last_msg_time, &newMsgCount, &last_updated); err != nil {
+	if err := session.Query(checkQuery, companionID).Scan(&existingChatID, &chatType, &secured, &muted, &last_msg_time, &newMsgCount, &last_updated, &privateKey); err != nil {
 		if err != gocql.ErrNotFound {
 			return gocql.UUID{}, err
 		}
@@ -285,6 +310,7 @@ func createChatInKeyspace(session *gocql.Session, chatID gocql.UUID, userID, com
 		muted = false
 		newMsgCount = 0
 		last_msg_time = nil
+		privateKey = tokens.GeneratePrivateKey()
 		existingChatID = chatID
 	} else {
 		deleteQuery := `DELETE FROM ` + tableName + ` WHERE user_id = ? AND last_updated = ? AND companion_id = ? AND chat_id = ?`
@@ -293,9 +319,9 @@ func createChatInKeyspace(session *gocql.Session, chatID gocql.UUID, userID, com
 		}
 	}
 
-	insertQuery := `INSERT INTO ` + tableName + ` (chat_id,user_id, companion_id, chat_type, secured, muted,last_msg_time, new_msg_count, last_updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	insertQuery := `INSERT INTO ` + tableName + ` (chat_id, user_id, companion_id, chat_type, secured, muted, last_msg_time, new_msg_count, last_updated, private_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
-	if err := session.Query(insertQuery, existingChatID, userID, companionID, chatType, secured, muted, last_msg_time, newMsgCount, time.Now()).Exec(); err != nil {
+	if err := session.Query(insertQuery, existingChatID, userID, companionID, chatType, secured, muted, last_msg_time, newMsgCount, _last_updated, privateKey).Exec(); err != nil {
 		return gocql.UUID{}, err
 	}
 
@@ -325,16 +351,17 @@ func CreateChat(session *gocql.Session, c *gin.Context) {
 	}
 	newUUID := uuid.New()
 	newChatID, _ := gocql.UUIDFromBytes(newUUID[:])
+	last_updated := time.Now()
 
 	userID := userDataToToken.User_id
 
-	chatID, err := createChatInKeyspace(session, newChatID, userID, chatData.Companion_id)
+	chatID, err := createChatInKeyspace(session, newChatID, userID, chatData.Companion_id, last_updated)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create chat: %v", err)})
 		return
 	}
 
-	_, err = createChatInKeyspace(session, newChatID, chatData.Companion_id, userID)
+	_, err = createChatInKeyspace(session, newChatID, chatData.Companion_id, userID, last_updated)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create chat for companion: %v", err)})
 		return
@@ -403,7 +430,8 @@ func GetChatDetails(userID uint, chatID gocql.UUID) (Chat, error) {
 		secured,
 		last_msg_time,
 		last_updated,
-		new_msg_count
+		new_msg_count,
+		private_key
 	FROM
 		%s
 	WHERE
@@ -413,9 +441,10 @@ func GetChatDetails(userID uint, chatID gocql.UUID) (Chat, error) {
 
 	var lastMsgTime *time.Time
 	var lastUpdateTime *time.Time
+	var privateKey string
 
 	if err := session.Query(query, chatID).Scan(
-		&chat.ChatID, &chat.CompanionID, &chat.ChatType, &chat.Secured, &lastMsgTime, &lastUpdateTime, &chat.NewMsgCount,
+		&chat.ChatID, &chat.CompanionID, &chat.ChatType, &chat.Secured, &lastMsgTime, &lastUpdateTime, &chat.NewMsgCount, &privateKey,
 	); err != nil {
 		return chat, fmt.Errorf("failed to fetch chat details: %v", err)
 	}
@@ -459,10 +488,20 @@ func GetChatDetails(userID uint, chatID gocql.UUID) (Chat, error) {
 	if err := session.Query(queryLastMessage, chat.ChatID).Scan(&lastMessageSenderID, &lastMessageText); err != nil {
 		lastMessageSenderID = nil
 		lastMessageText = nil
-	}
+		chat.LastMsg = nil
+		chat.IsMyMessage = false
+	} else {
+		chat.LastMsg = lastMessageText
+		chat.IsMyMessage = lastMessageSenderID != nil && *lastMessageSenderID == userID
 
-	chat.LastMsg = lastMessageText
-	chat.IsMyMessage = lastMessageSenderID != nil && *lastMessageSenderID == userID
+		if lastMessageText != nil {
+			decryptedText, err := helpers.DecryptWithPrivateKey(*lastMessageText, privateKey)
+			if err != nil {
+				return chat, fmt.Errorf("failed to fetch chat details: %v", err)
+			}
+			chat.LastMsg = &decryptedText
+		}
+	}
 
 	return chat, nil
 }

@@ -70,6 +70,35 @@ func EncryptWithPublicKey(data string, publicKeyBase64 string) (string, error) {
 	return encryptedData, nil
 }
 
+// Создание публичного ключа из приватного
+func ExtractPublicKey(privateKeyBase64 string) (string, error) {
+	privateKeyPEM := formatPEM(privateKeyBase64)
+
+	block, _ := pem.Decode([]byte(privateKeyPEM))
+	if block == nil {
+		return "", errors.New("failed to decode private key")
+	}
+
+	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		return "", err
+	}
+
+	publicKey := &privateKey.PublicKey
+
+	publicKeyBytes, err := x509.MarshalPKIXPublicKey(publicKey)
+	if err != nil {
+		return "", err
+	}
+
+	publicKeyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: publicKeyBytes,
+	})
+
+	return string(publicKeyPEM), nil
+}
+
 func formatPEM(keyBase64 string) string {
 	if !strings.Contains(keyBase64, "\n") {
 		keyBase64 = strings.ReplaceAll(keyBase64, "-----END PUBLIC KEY-----", "\n-----END PUBLIC KEY-----")

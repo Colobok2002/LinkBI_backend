@@ -5,6 +5,7 @@ import (
 	"Bmessage_backend/helpers"
 	"Bmessage_backend/routs/chats"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -73,7 +74,7 @@ func AddMessage(session *gocql.Session, c *gin.Context) {
 
 	userID := userDataToToken.User_id
 	keyspaceUser := fmt.Sprintf("user_%d", userID)
-	queryCompanionDetID := fmt.Sprintf(`SELECT companion_id, chat_type, secured, muted, last_updated FROM %s.chats WHERE chat_id = ? ALLOW FILTERING;`, keyspaceUser)
+	queryCompanionDetID := fmt.Sprintf(`SELECT companion_id, chat_type, secured, muted, last_updated ,private_key FROM %s.chats WHERE chat_id = ? ALLOW FILTERING;`, keyspaceUser)
 
 	var companionID uint
 	var chatType string
@@ -81,16 +82,18 @@ func AddMessage(session *gocql.Session, c *gin.Context) {
 	var muted bool
 	var newMsgCount int
 	var lastUpdated *time.Time
+	var private_keyUser string
+	var private_keyCompanion string
 
-	if err := session.Query(queryCompanionDetID, chatID).Scan(&companionID, &chatType, &secured, &muted, &lastUpdated); err != nil {
+	if err := session.Query(queryCompanionDetID, chatID).Scan(&companionID, &chatType, &secured, &muted, &lastUpdated, &private_keyUser); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get chat details"})
 		return
 	}
 
 	keyspaceCompanion := fmt.Sprintf("user_%d", companionID)
 
-	queryCompanionNewMsgCount := fmt.Sprintf(`SELECT new_msg_count FROM %s.chats WHERE user_id = ? AND companion_id = ? AND chat_id = ? AND last_updated = ? ALLOW FILTERING;`, keyspaceCompanion)
-	if err := session.Query(queryCompanionNewMsgCount, companionID, userID, chatID, lastUpdated).Scan(&newMsgCount); err != nil {
+	queryCompanionNewMsgCount := fmt.Sprintf(`SELECT new_msg_count,private_key FROM %s.chats WHERE user_id = ? AND companion_id = ? AND chat_id = ? AND last_updated = ? ALLOW FILTERING;`, keyspaceCompanion)
+	if err := session.Query(queryCompanionNewMsgCount, companionID, userID, chatID, lastUpdated).Scan(&newMsgCount, &private_keyCompanion); err != nil {
 		if err == gocql.ErrNotFound {
 			newMsgCount = 0
 		} else {
@@ -132,38 +135,68 @@ func AddMessage(session *gocql.Session, c *gin.Context) {
 		forwardedFromMessageID = &messageID
 	}
 
-	queryUserAddMessage := fmt.Sprintf(`INSERT INTO %s.messages (chat_id, message_id, sender_id, message_text, created_at, reply_to_message_id, forwarded_from_chat_id, forwarded_from_message_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, keyspaceUser)
-	if err := session.Query(queryUserAddMessage, chatID, messageID, userID, messageData.MessageText, createdAt, replyToMessageID, forwardedFromChatID, forwardedFromMessageID).Exec(); err != nil {
+	publicKeyUser, err := helpers.ExtractPublicKey(private_keyUser)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert message"})
 		return
 	}
 
-	queryCompanionAddMessage := fmt.Sprintf(`INSERT INTO %s.messages (chat_id, message_id, sender_id, message_text, created_at, reply_to_message_id, forwarded_from_chat_id, forwarded_from_message_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, keyspaceCompanion)
-	if err := session.Query(queryCompanionAddMessage, chatID, messageID, userID, messageData.MessageText, createdAt, replyToMessageID, forwardedFromChatID, forwardedFromMessageID).Exec(); err != nil {
+	publicKeyCompanion, err := helpers.ExtractPublicKey(private_keyCompanion)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert message"})
+		return
+	}
+
+	encryptedDataUser, err := helpers.EncryptWithPublicKey(messageData.MessageText, publicKeyUser)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert message"})
+		return
+	}
+
+	encryptedDataCompanion, err := helpers.EncryptWithPublicKey(messageData.MessageText, publicKeyCompanion)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert message"})
+		return
+	}
+
+	queryUserAddMessage := fmt.Sprintf(`INSERT INTO %s.messages (chat_id, message_id, sender_id, message_text, created_at, reply_to_message_id, forwarded_from_chat_id, forwarded_from_message_id,read) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, keyspaceUser)
+	if err := session.Query(queryUserAddMessage, chatID, messageID, userID, encryptedDataUser, createdAt, replyToMessageID, forwardedFromChatID, forwardedFromMessageID, false).Exec(); err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert message"})
+		return
+	}
+
+	queryCompanionAddMessage := fmt.Sprintf(`INSERT INTO %s.messages (chat_id, message_id, sender_id, message_text, created_at, reply_to_message_id, forwarded_from_chat_id, forwarded_from_message_id,read) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, keyspaceCompanion)
+	if err := session.Query(queryCompanionAddMessage, chatID, messageID, userID, encryptedDataCompanion, createdAt, replyToMessageID, forwardedFromChatID, forwardedFromMessageID, false).Exec(); err != nil {
+		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert message"})
 		return
 	}
 
 	deleteChatUser := fmt.Sprintf(`DELETE FROM %s.chats WHERE user_id = ? AND companion_id = ? AND chat_id = ? AND last_updated = ?`, keyspaceUser)
 	if err := session.Query(deleteChatUser, userID, companionID, chatID, lastUpdated).Exec(); err != nil {
+		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete existing chat for user"})
 		return
 	}
 
-	insertChatUser := fmt.Sprintf(`INSERT INTO %s.chats (user_id, chat_id, companion_id, chat_type, secured, muted, new_msg_count, last_msg_time, last_updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, keyspaceUser)
-	if err := session.Query(insertChatUser, userID, chatID, companionID, chatType, secured, muted, 0, createdAt, createdAt).Exec(); err != nil {
+	insertChatUser := fmt.Sprintf(`INSERT INTO %s.chats (user_id, chat_id, companion_id, chat_type, secured, muted, new_msg_count, last_msg_time, last_updated,private_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, keyspaceUser)
+	if err := session.Query(insertChatUser, userID, chatID, companionID, chatType, secured, muted, 0, createdAt, createdAt, private_keyUser).Exec(); err != nil {
+		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert new chat for user"})
 		return
 	}
 
 	deleteChatCompanion := fmt.Sprintf(`DELETE FROM %s.chats WHERE user_id = ? AND companion_id = ? AND chat_id = ? AND last_updated = ?`, keyspaceCompanion)
 	if err := session.Query(deleteChatCompanion, companionID, userID, chatID, lastUpdated).Exec(); err != nil {
+		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete existing chat for companion"})
 		return
 	}
 
-	insertChatCompanion := fmt.Sprintf(`INSERT INTO %s.chats (user_id, chat_id, companion_id, chat_type, secured, muted, new_msg_count, last_msg_time, last_updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, keyspaceCompanion)
-	if err := session.Query(insertChatCompanion, companionID, chatID, userID, chatType, secured, muted, newMsgCount+1, createdAt, createdAt).Exec(); err != nil {
+	insertChatCompanion := fmt.Sprintf(`INSERT INTO %s.chats (user_id, chat_id, companion_id, chat_type, secured, muted, new_msg_count, last_msg_time, last_updated,private_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, keyspaceCompanion)
+	if err := session.Query(insertChatCompanion, companionID, chatID, userID, chatType, secured, muted, newMsgCount+1, createdAt, createdAt, private_keyCompanion).Exec(); err != nil {
+		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert new chat for companion"})
 		return
 	}
@@ -221,6 +254,23 @@ func GetMessages(session *gocql.Session, c *gin.Context) {
 	userID := userDataToToken.User_id
 	keyspaceUser := fmt.Sprintf("user_%d", userID)
 
+	var privateKey string
+
+	checkQuery := fmt.Sprintf(`SELECT
+		private_key
+	FROM
+		%s.chats
+	WHERE
+	chat_id = ?
+	LIMIT 1
+	ALLOW FILTERING;
+	`, keyspaceUser)
+
+	if err := session.Query(checkQuery, chatID).Scan(&privateKey); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch messages"})
+		return
+	}
+
 	query := fmt.Sprintf(`SELECT chat_id, message_id, sender_id, message_text, created_at, reply_to_message_id, forwarded_from_chat_id, forwarded_from_message_id
 	FROM %s.messages
 	WHERE chat_id = ?;`, keyspaceUser)
@@ -239,6 +289,14 @@ func GetMessages(session *gocql.Session, c *gin.Context) {
 		&msg.ReplyToMessageID,
 		&msg.ForwardedFromChatID,
 		&msg.ForwardedFromMessageID) {
+
+		decryptedText, err := helpers.DecryptWithPrivateKey(msg.MessageText, privateKey)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decrypt message"})
+			return
+		}
+		msg.MessageText = decryptedText
 		msg.IsMyMessage = (msg.SenderID == userID)
 		messages = append(messages, msg)
 	}
