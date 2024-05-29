@@ -38,17 +38,32 @@ definitions:
       forwarded_from_message_id:
         type: string
       is_my_message:
-        description: New field
         type: boolean
       message_id:
         type: string
       message_text:
         type: string
+      read:
+        type: boolean
       reply_to_message_id:
         type: string
       sender_id:
         type: integer
       temporary_message_id:
+        type: string
+      type:
+        type: string
+    type: object
+  messages.ReadMessageStruct:
+    description: Данные для прочтения сообщения
+    properties:
+      chat_id:
+        type: string
+      created_at:
+        type: string
+      message_id:
+        type: string
+      user_token:
         type: string
     type: object
   users.ErrorResponse:
@@ -281,6 +296,34 @@ paths:
             type: object
       summary: Получение сообщений
       tags:
+      - Message
+  /messages/read-message:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Данные для прочтения сообщения
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/messages.ReadMessageStruct'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: successful response
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: bad request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Сообщение было прочитано
+      tags:
+      - Message
       - Message
   /token/generateToken:
     get:

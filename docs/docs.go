@@ -245,6 +245,48 @@ const docTemplate = `{
                 }
             }
         },
+        "/messages/read-message": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Message",
+                    "Message"
+                ],
+                "summary": "Сообщение было прочитано",
+                "parameters": [
+                    {
+                        "description": "Данные для прочтения сообщения",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/messages.ReadMessageStruct"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "successful response",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/token/generateToken": {
             "get": {
                 "produces": [
@@ -492,7 +534,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "is_my_message": {
-                    "description": "New field",
                     "type": "boolean"
                 },
                 "message_id": {
@@ -501,6 +542,9 @@ const docTemplate = `{
                 "message_text": {
                     "type": "string"
                 },
+                "read": {
+                    "type": "boolean"
+                },
                 "reply_to_message_id": {
                     "type": "string"
                 },
@@ -508,6 +552,27 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "temporary_message_id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "messages.ReadMessageStruct": {
+            "description": "Данные для прочтения сообщения",
+            "type": "object",
+            "properties": {
+                "chat_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "message_id": {
+                    "type": "string"
+                },
+                "user_token": {
                     "type": "string"
                 }
             }

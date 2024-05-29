@@ -17,6 +17,7 @@ func MessageRouter(router *gin.Engine) {
 	routeBase := "messages/"
 	router.POST(routeBase+"add-message", database.WithDatabaseScylla(AddMessage))
 	router.GET(routeBase+"get-messages", database.WithDatabaseScylla(GetMessages))
+	router.POST(routeBase+"read-message", database.WithDatabaseScylla(ReadMessage))
 }
 
 // AddMessageStruct represents the JSON
@@ -41,7 +42,9 @@ type Message struct {
 	ReplyToMessageID       *gocql.UUID `json:"reply_to_message_id"`
 	ForwardedFromChatID    *gocql.UUID `json:"forwarded_from_chat_id"`
 	ForwardedFromMessageID *gocql.UUID `json:"forwarded_from_message_id"`
-	IsMyMessage            bool        `json:"is_my_message"` // New field
+	IsMyMessage            bool        `json:"is_my_message"`
+	Read                   bool        `json:"read"`
+	Type                   string      `json:"type"`
 }
 
 // @Tags Message
@@ -212,6 +215,8 @@ func AddMessage(session *gocql.Session, c *gin.Context) {
 		ForwardedFromChatID:    forwardedFromChatID,
 		ForwardedFromMessageID: forwardedFromMessageID,
 		IsMyMessage:            true,
+		Read:                   false,
+		Type:                   "new",
 	}
 
 	chats.UpdeteDataChat(userID, chatID)
@@ -271,7 +276,7 @@ func GetMessages(session *gocql.Session, c *gin.Context) {
 		return
 	}
 
-	query := fmt.Sprintf(`SELECT chat_id, message_id, sender_id, message_text, created_at, reply_to_message_id, forwarded_from_chat_id, forwarded_from_message_id
+	query := fmt.Sprintf(`SELECT chat_id, message_id, sender_id, message_text, created_at, reply_to_message_id, forwarded_from_chat_id, forwarded_from_message_id , read
 	FROM %s.messages
 	WHERE chat_id = ?;`, keyspaceUser)
 
@@ -288,7 +293,8 @@ func GetMessages(session *gocql.Session, c *gin.Context) {
 		&msg.CreatedAt,
 		&msg.ReplyToMessageID,
 		&msg.ForwardedFromChatID,
-		&msg.ForwardedFromMessageID) {
+		&msg.ForwardedFromMessageID,
+		&msg.Read) {
 
 		decryptedText, err := helpers.DecryptWithPrivateKey(msg.MessageText, privateKey)
 		if err != nil {
@@ -307,4 +313,89 @@ func GetMessages(session *gocql.Session, c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, messages)
+}
+
+// ReadMessageStruct represents the JSON
+// @Description Данные для прочтения сообщения
+type ReadMessageStruct struct {
+	ChatID    string    `json:"chat_id"`
+	MessageID string    `json:"message_id"`
+	UserToken string    `json:"user_token"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// @Tags Message
+// ReadMessage godoc
+// @Tags Message
+// @Summary Сообщение было прочитано
+// @Accept json
+// @Produce  json
+// @Param data body ReadMessageStruct true "Данные для прочтения сообщения"
+// @Success 200 {object} map[string]interface{} "successful response"
+// @Failure 400 {object} map[string]interface{} "bad request"
+// @Router /messages/read-message [post]
+func ReadMessage(session *gocql.Session, c *gin.Context) {
+	var messageData ReadMessageStruct
+	if err := c.BindJSON(&messageData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data"})
+		return
+	}
+
+	chatID, err := gocql.ParseUUID(messageData.ChatID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid chat_id"})
+		return
+	}
+
+	messageID, err := gocql.ParseUUID(messageData.MessageID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid message_id"})
+		return
+	}
+
+	userDataToToken, err := helpers.DecryptAES(messageData.UserToken)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	userID := userDataToToken.User_id
+	keyspaceUser := fmt.Sprintf("user_%d", userID)
+	queryCompanionDetID := fmt.Sprintf(`SELECT companion_id FROM %s.chats WHERE chat_id = ? ALLOW FILTERING;`, keyspaceUser)
+
+	var companionID uint
+
+	if err := session.Query(queryCompanionDetID, chatID).Scan(&companionID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get chat details"})
+		return
+	}
+
+	keyspaceCompanion := fmt.Sprintf("user_%d", companionID)
+
+	queryUserReadMessage := fmt.Sprintf(`UPDATE %s.messages SET read = true WHERE chat_id = ? AND created_at = ? AND message_id = ?`, keyspaceUser)
+	if err := session.Query(queryUserReadMessage, chatID, messageData.CreatedAt, messageID).Exec(); err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update read status for user"})
+		return
+	}
+
+	queryCompanionReadMessage := fmt.Sprintf(`UPDATE %s.messages SET read = true WHERE chat_id = ? AND created_at = ? AND message_id = ?`, keyspaceCompanion)
+	if err := session.Query(queryCompanionReadMessage, chatID, messageData.CreatedAt, messageID).Exec(); err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update read status for companion"})
+		return
+	}
+
+	newMessage := Message{
+		MessageID: messageID,
+		Read:      true,
+		Type:      "read",
+	}
+
+	chats.UpdeteDataChat(userID, chatID)
+	chats.UpdeteDataChat(companionID, chatID)
+
+	SendWsMessageToChat(chatID.String(), newMessage)
+
+	c.JSON(http.StatusOK, gin.H{"status": "Message read successfully"})
 }
