@@ -361,15 +361,18 @@ func ReadMessage(session *gocql.Session, c *gin.Context) {
 
 	userID := userDataToToken.User_id
 	keyspaceUser := fmt.Sprintf("user_%d", userID)
-	queryCompanionDetID := fmt.Sprintf(`SELECT companion_id FROM %s.chats WHERE chat_id = ? ALLOW FILTERING;`, keyspaceUser)
+	queryCompanionDetID := fmt.Sprintf(`SELECT companion_id,new_msg_count,last_updated FROM %s.chats WHERE chat_id = ? ALLOW FILTERING;`, keyspaceUser)
 
 	var companionID uint
+	var newMsgCount int
+	var last_updated time.Time
 
-	if err := session.Query(queryCompanionDetID, chatID).Scan(&companionID); err != nil {
+	if err := session.Query(queryCompanionDetID, chatID).Scan(&companionID, &newMsgCount, &last_updated); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get chat details"})
 		return
 	}
 
+	log.Println(newMsgCount)
 	keyspaceCompanion := fmt.Sprintf("user_%d", companionID)
 
 	queryUserReadMessage := fmt.Sprintf(`UPDATE %s.messages SET read = true WHERE chat_id = ? AND created_at = ? AND message_id = ?`, keyspaceUser)
@@ -384,6 +387,17 @@ func ReadMessage(session *gocql.Session, c *gin.Context) {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update read status for companion"})
 		return
+	}
+
+	if newMsgCount > 0 {
+		newMsgCount--
+		updateUserChatQuery := fmt.Sprintf(`UPDATE %s.chats SET new_msg_count = ? WHERE user_id = ? and last_updated = ? and companion_id = ? and chat_id = ?`, keyspaceUser)
+		if err := session.Query(updateUserChatQuery, newMsgCount, userDataToToken.User_id, last_updated, companionID, chatID).Exec(); err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update new message count for user"})
+			return
+		}
+
 	}
 
 	newMessage := Message{
