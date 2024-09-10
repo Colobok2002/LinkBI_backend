@@ -10,18 +10,6 @@ services:
     networks:
       - redis_network
 
-  scylla:
-    image: scylladb/scylla:latest
-    ports:
-      - "9042:9042"
-      - "7001:7001"
-      - "7199:7199"
-      - "9160:9160"
-    volumes:
-      - scylla_data:/var/lib/scylla
-    networks:
-      - scylla_network
-
   pg:
     image: postgres:latest
     environment:
@@ -39,12 +27,9 @@ services:
 volumes:
   redis_data:
     driver: local
-  scylla_data:
-    driver: local
   pg_data:
     driver: local
 
 networks:
   redis_network:
-  scylla_network:
   pg_network:
