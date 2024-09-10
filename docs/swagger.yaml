@@ -1,4 +1,10 @@
 definitions:
+  auth.GUIDTokens:
+    description: структура для получения токена.
+    properties:
+      GUID:
+        type: string
+    type: object
   chats.CreateChatStruct:
     description: Данные для создания чатов
     properties:
@@ -395,12 +401,12 @@ paths:
       consumes:
       - application/json
       parameters:
-      - description: Данные пользователя
+      - description: GUID ID
         in: body
         name: data
         required: true
         schema:
-          $ref: '#/definitions/users.UserLogin'
+          $ref: '#/definitions/auth.GUIDTokens'
       produces:
       - application/json
       responses:
@@ -414,9 +420,9 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Аутентификация пользователя по логину и паролю
+      summary: эндпойт для получения пары токенов
       tags:
-      - Users
+      - Auth
   /user/registration:
     post:
       consumes:

@@ -396,17 +396,17 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Users"
+                    "Auth"
                 ],
-                "summary": "Аутентификация пользователя по логину и паролю",
+                "summary": "эндпойт для получения пары токенов",
                 "parameters": [
                     {
-                        "description": "Данные пользователя",
+                        "description": "GUID ID",
                         "name": "data",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/users.UserLogin"
+                            "$ref": "#/definitions/auth.GUIDTokens"
                         }
                     }
                 ],
@@ -476,6 +476,15 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "auth.GUIDTokens": {
+            "description": "структура для получения токена.",
+            "type": "object",
+            "properties": {
+                "GUID": {
+                    "type": "string"
+                }
+            }
+        },
         "chats.CreateChatStruct": {
             "description": "Данные для создания чатов",
             "type": "object",

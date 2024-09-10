@@ -3,10 +3,7 @@ package main
 import (
 	"Bmessage_backend/database"
 	Models "Bmessage_backend/models"
-	"Bmessage_backend/routs/chats"
-	"Bmessage_backend/routs/messages"
-	"Bmessage_backend/routs/tokens"
-	"Bmessage_backend/routs/users"
+	"Bmessage_backend/routs/auth"
 	"log"
 	"net/http"
 	"os"
@@ -31,12 +28,13 @@ func main() {
 
 	// Routs
 	router := gin.Default()
-	users.UsersRouter(router)
-	tokens.TokensRouter(router)
-	chats.ChatRouter(router)
-	chats.ChatsRouterWs(router)
-	messages.MessageRouter(router)
-	messages.MessageRouterWs(router)
+	auth.AuthRouter(router)
+	// users.UsersRouter(router)
+	// tokens.TokensRouter(router)
+	// chats.ChatRouter(router)
+	// chats.ChatsRouterWs(router)
+	// messages.MessageRouter(router)
+	// messages.MessageRouterWs(router)
 
 	// Docs
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, ginSwagger.URL("/swagger-docs")))
