@@ -5,18 +5,17 @@ import (
 	"fmt"
 	"log"
 
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
 // Определение модели User
 type User struct {
 	gorm.Model
-	Name       string `gorm:"column:name"`
-	SoName     string `gorm:"column:so_name"`
-	Nik        string `gorm:"column:nik;unique"`
-	Login      string `gorm:"column:login;unique"`
-	Password   string `gorm:"column:password"`
-	PrivateKey string `gorm:"column:private_key"`
+	GUID         string `gorm:"column:guid;unique"`   // Идентификатор пользователя
+	Email        string `gorm:"column:email;unique"`  // Email для уведомлений
+	RefreshToken string `gorm:"column:refresh_token"` // bcrypt-хеш refresh токена
+	RefreshIP    string `gorm:"column:refresh_ip"`    // IP-адрес, с которого был выдан refresh токен
 }
 
 func MigrationUsertabel() {
@@ -31,6 +30,22 @@ func MigrationUsertabel() {
 	}
 
 	fmt.Println("Migration executed successfully")
-	sqlDB, err := db.DB()
+	sqlDB, _ := db.DB()
 	sqlDB.Close()
+}
+
+// Установить refresh токен (хешировать и сохранять)
+func (u *User) SetRefreshToken(refreshToken string) error {
+	hashedToken, err := bcrypt.GenerateFromPassword([]byte(refreshToken), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	u.RefreshToken = string(hashedToken)
+	return nil
+}
+
+// Проверить refresh токен
+func (u *User) CheckRefreshToken(refreshToken string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(u.RefreshToken), []byte(refreshToken))
+	return err == nil
 }

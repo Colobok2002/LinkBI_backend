@@ -15,7 +15,7 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/user/log-in-with-credentials": {
+        "/auth/get-tokens": {
             "post": {
                 "consumes": [
                     "application/json"
@@ -26,10 +26,10 @@ const docTemplate = `{
                 "tags": [
                     "Auth"
                 ],
-                "summary": "эндпойт для получения пары токенов",
+                "summary": "Эндпойт для получения пары токенов",
                 "parameters": [
                     {
-                        "description": "GUID ID",
+                        "description": "GUID пользователя",
                         "name": "data",
                         "in": "body",
                         "required": true,

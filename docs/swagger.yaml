@@ -8,12 +8,12 @@ definitions:
 info:
   contact: {}
 paths:
-  /user/log-in-with-credentials:
+  /auth/get-tokens:
     post:
       consumes:
       - application/json
       parameters:
-      - description: GUID ID
+      - description: GUID пользователя
         in: body
         name: data
         required: true
@@ -32,7 +32,7 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: эндпойт для получения пары токенов
+      summary: Эндпойт для получения пары токенов
       tags:
       - Auth
 swagger: "2.0"
