@@ -25,18 +25,22 @@ func GenerateTokens(user *models.User, clientIP string) (string, string, error) 
 		GUID: user.GUID,
 		IP:   clientIP,
 		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: time.Now().Add(15 * time.Minute).Unix(), // Access токен живет 15 минут
+			ExpiresAt: time.Now().Add(15 * time.Hour).Unix(), // Access токен живет 15 минут
 		},
 	})
-	accessSecret := os.Getenv("ACCESS_SECRET") // Секретный ключ для Access токена
+	accessSecret := []byte(os.Getenv("ACCESS_SECRET")) // Секретный ключ для Access токена
 	accessTokenString, err := accessToken.SignedString([]byte(accessSecret))
 	if err != nil {
 		return "", "", err
 	}
 
 	// Генерация Refresh токена
-	refreshToken, _ := generateRandomString(32) // Генерация случайной строки для Refresh токена
-	err = user.SetRefreshToken(refreshToken)    // Сохранение хешированного Refresh токена в базе
+	refreshToken, err := GenerateRefreshToken() // Используем новую функцию GenerateRefreshToken
+	if err != nil {
+		return "", "", err
+	}
+
+	err = user.SetRefreshToken(refreshToken) // Сохранение хешированного Refresh токена в базе
 	if err != nil {
 		return "", "", err
 	}
@@ -44,8 +48,17 @@ func GenerateTokens(user *models.User, clientIP string) (string, string, error) 
 	return accessTokenString, refreshToken, nil
 }
 
+// Генерация случайного Refresh токена
+func GenerateRefreshToken() (string, error) {
+	// Генерация случайной строки длиной 32 байта для Refresh токена
+	refreshToken, err := generateRandomString(32)
+	if err != nil {
+		return "", err
+	}
+	return refreshToken, nil
+}
+
 // Функция генерации случайной строки для Refresh токена
-// Генерация случайной строки нужной длины
 func generateRandomString(length int) (string, error) {
 	// Параметры для генерации случайных байтов
 	if length <= 0 {

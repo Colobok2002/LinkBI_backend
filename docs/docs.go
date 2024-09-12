@@ -16,7 +16,8 @@ const docTemplate = `{
     "basePath": "{{.BasePath}}",
     "paths": {
         "/auth/get-tokens": {
-            "post": {
+            "get": {
+                "description": "Эндпойнт для генерации access и refresh токенов на основе GUID пользователя.",
                 "consumes": [
                     "application/json"
                 ],
@@ -26,16 +27,14 @@ const docTemplate = `{
                 "tags": [
                     "Auth"
                 ],
-                "summary": "Эндпойт для получения пары токенов",
+                "summary": "Получение токенов по GUID пользователя",
                 "parameters": [
                     {
+                        "type": "string",
                         "description": "GUID пользователя",
-                        "name": "data",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/auth.GUIDTokens"
-                        }
+                        "name": "GUID",
+                        "in": "query",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -52,18 +51,75 @@ const docTemplate = `{
                             "type": "object",
                             "additionalProperties": true
                         }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
                     }
                 }
             }
-        }
-    },
-    "definitions": {
-        "auth.GUIDTokens": {
-            "description": "структура для получения токена.",
-            "type": "object",
-            "properties": {
-                "GUID": {
-                    "type": "string"
+        },
+        "/auth/refresh-tokens": {
+            "get": {
+                "description": "Эндпойнт для обновления access и refresh токенов на основе существующего refresh токена.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Обновление токенов по Access и Refresh токенам",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Access токен",
+                        "name": "access_token",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Refresh токен",
+                        "name": "refresh_token",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "successful response",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
                 }
             }
         }
